@@ -24,7 +24,14 @@ export async function processVoiceNoteWithGemini(
   }
 
   const categoryNames = categories.map(c => c.name);
-  const cleanMimeType = (mimeType.split(';')[0] || 'audio/ogg').trim();
+
+  // Normalize mime type for Gemini audio input
+  let cleanMimeType = (mimeType.split(';')[0] || 'audio/ogg').trim().toLowerCase();
+  if (cleanMimeType === 'audio/oga' || cleanMimeType.includes('oga') || cleanMimeType.includes('opus')) {
+    cleanMimeType = 'audio/ogg';
+  } else if (!cleanMimeType.startsWith('audio/')) {
+    cleanMimeType = 'audio/ogg';
+  }
 
   const prompt = `
 Eres un asistente financiero y contable altamente preciso.
@@ -59,30 +66,50 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
 `;
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Using gemini-1.5-flash which has multimodal audio support
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.1,
-    },
-  });
-
   const base64Audio = audioBuffer.toString('base64');
 
-  const result = await model.generateContent([
-    prompt,
-    {
-      inlineData: {
-        mimeType: cleanMimeType,
-        data: base64Audio,
-      },
-    },
-  ]);
+  // Candidate models: start with gemini-2.0-flash as primary, fallback to gemini-1.5-flash-latest
+  const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-2.5-flash'];
+  let responseText = '';
+  let lastError: any = null;
 
-  const responseText = result.response.text();
+  for (const modelName of candidateModels) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+        },
+      });
+
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            mimeType: cleanMimeType,
+            data: base64Audio,
+          },
+        },
+      ]);
+
+      responseText = result.response.text();
+      if (responseText) {
+        break; // Success
+      }
+    } catch (err: any) {
+      console.warn(`[Gemini Voice] Model ${modelName} failed:`, err?.message || err);
+      lastError = err;
+      // If error is 404 / not found, loop to next model
+      if (err?.message?.includes('404') || err?.message?.includes('not found')) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
   if (!responseText) {
-    throw new Error('Gemini devolvió una respuesta vacía.');
+    throw lastError || new Error('Gemini devolvió una respuesta vacía.');
   }
 
   // Parse JSON safely
