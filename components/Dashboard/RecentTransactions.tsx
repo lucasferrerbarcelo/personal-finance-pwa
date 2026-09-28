@@ -6,6 +6,7 @@ import { Transaction } from '@/lib/supabase/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { CategoryIcon } from '../UI/CategoryIcon';
 import { CurrencyBadge } from '../UI/CurrencyBadge';
+import { PaymentMethodBadge } from '../UI/PaymentMethodBadge';
 import { ArrowRight, Pencil, Trash2, CreditCard } from 'lucide-react';
 import { deleteTransaction } from '@/lib/supabase/client';
 
@@ -83,6 +84,7 @@ export function RecentTransactions({ transactions, onEdit, onRefresh }: RecentTr
                     </p>
                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-400">
                       <span>{formatDate(tx.date, { short: true })}</span>
+                      <PaymentMethodBadge method={tx.payment_method} />
                       {isInstallment && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-purple-300 bg-purple-500/10 px-1.5 py-0.2 rounded border border-purple-500/20">
                           <CreditCard className="w-2.5 h-2.5" />

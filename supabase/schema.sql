@@ -19,11 +19,15 @@ CREATE TABLE IF NOT EXISTS transactions (
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   note TEXT,
+  payment_method TEXT NOT NULL DEFAULT 'transferencia' CHECK (payment_method IN ('efectivo', 'tarjeta_credito', 'tarjeta_debito', 'transferencia', 'otro')),
   installment_current INTEGER,
   installment_total INTEGER,
   parent_transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Migration for existing tables:
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'transferencia' CHECK (payment_method IN ('efectivo', 'tarjeta_credito', 'tarjeta_debito', 'transferencia', 'otro'));
 
 -- 3. Debts
 CREATE TABLE IF NOT EXISTS debts (

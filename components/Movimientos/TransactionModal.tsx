@@ -2,11 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../UI/Modal';
-import { Category, Currency, Transaction, TransactionType } from '@/lib/supabase/types';
+import { Category, Currency, PaymentMethod, Transaction, TransactionType } from '@/lib/supabase/types';
 import { createTransaction, fetchCategories, updateTransaction } from '@/lib/supabase/client';
 import { formatCurrency, getCurrentDateISO } from '@/lib/utils';
 import { CategoryIcon } from '../UI/CategoryIcon';
 import { CreditCard, Calendar, FileText, Check } from 'lucide-react';
+
+const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: string }[] = [
+  { value: 'transferencia', label: 'Transferencia', icon: '📱' },
+  { value: 'tarjeta_debito', label: 'Débito', icon: '💳' },
+  { value: 'tarjeta_credito', label: 'Crédito', icon: '💳' },
+  { value: 'efectivo', label: 'Efectivo', icon: '💵' },
+];
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -25,6 +32,7 @@ export function TransactionModal({
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>('ARS');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('transferencia');
   const [categoryId, setCategoryId] = useState<string>('');
   const [date, setDate] = useState<string>(getCurrentDateISO());
   const [note, setNote] = useState<string>('');
@@ -43,6 +51,7 @@ export function TransactionModal({
       setType(transactionToEdit.type);
       setAmount(String(transactionToEdit.amount));
       setCurrency(transactionToEdit.currency);
+      setPaymentMethod(transactionToEdit.payment_method || 'transferencia');
       setCategoryId(transactionToEdit.category_id || '');
       setDate(transactionToEdit.date);
       setNote(transactionToEdit.note || '');
@@ -52,6 +61,7 @@ export function TransactionModal({
       setType('expense');
       setAmount('');
       setCurrency('ARS');
+      setPaymentMethod('transferencia');
       setDate(getCurrentDateISO());
       setNote('');
       setInstallments(1);
@@ -89,6 +99,7 @@ export function TransactionModal({
           category_id: categoryId || null,
           date,
           note: note.trim() || null,
+          payment_method: paymentMethod,
         });
       } else {
         await createTransaction({
@@ -98,6 +109,7 @@ export function TransactionModal({
           category_id: categoryId || null,
           date,
           note: note.trim() || null,
+          payment_method: paymentMethod,
           installments: type === 'expense' ? installments : 1,
         });
       }
@@ -217,6 +229,31 @@ export function TransactionModal({
           </div>
         </div>
 
+        {/* Payment Method Selector */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-400 mb-1.5">Método de Pago</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {PAYMENT_METHODS.map(pm => {
+              const isSelected = paymentMethod === pm.value;
+              return (
+                <button
+                  key={pm.value}
+                  type="button"
+                  onClick={() => setPaymentMethod(pm.value)}
+                  className={`py-2 px-2 text-xs font-medium rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
+                    isSelected
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm font-semibold'
+                      : 'bg-white/5 text-zinc-400 border-white/5 hover:text-zinc-200 hover:bg-white/10'
+                  }`}
+                >
+                  <span className="text-sm">{pm.icon}</span>
+                  <span>{pm.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Date & Note */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -258,7 +295,13 @@ export function TransactionModal({
               </label>
               <select
                 value={installments}
-                onChange={e => setInstallments(parseInt(e.target.value, 10))}
+                onChange={e => {
+                  const val = parseInt(e.target.value, 10);
+                  setInstallments(val);
+                  if (val > 1 && (paymentMethod === 'efectivo' || paymentMethod === 'transferencia')) {
+                    setPaymentMethod('tarjeta_credito');
+                  }
+                }}
                 className="bg-zinc-900 border border-white/15 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
               >
                 <option value={1}>1 cuota (Débito / Contado)</option>

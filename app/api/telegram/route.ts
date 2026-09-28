@@ -58,9 +58,18 @@ export async function POST(req: NextRequest) {
       }
 
       case 'EXPENSE': {
-        const { amount, currency, note, installments } = command;
+        const { amount, currency, note, installments, paymentMethod } = command;
         const perInstallment = Number((amount / installments).toFixed(2));
         const dates = calculateInstallmentDates(today, installments);
+
+        const paymentMethodLabels: Record<string, string> = {
+          efectivo: '💵 Efectivo',
+          tarjeta_credito: '💳 Tarjeta de Crédito',
+          tarjeta_debito: '💳 Tarjeta de Débito',
+          transferencia: '📱 Transferencia',
+          otro: '🔄 Otro',
+        };
+        const methodLabel = paymentMethodLabels[paymentMethod] || '📱 Transferencia';
 
         // Find best category match or default
         let categoryId: string | null = null;
@@ -93,6 +102,7 @@ export async function POST(req: NextRequest) {
               category_id: categoryId,
               date: dates[i],
               note: installmentNote,
+              payment_method: paymentMethod,
               installment_current: installments > 1 ? i + 1 : null,
               installment_total: installments > 1 ? installments : null,
               parent_transaction_id: installments > 1 ? parentId : null,
@@ -112,11 +122,13 @@ export async function POST(req: NextRequest) {
           reply = `✅ *Gasto en Cuotas Registrado*\n\n` +
             `📦 *Concepto:* ${note}\n` +
             `💳 *Total:* ${formatCurrency(amount, currency)} (${installments} cuotas de ${formatCurrency(perInstallment, currency)})\n` +
+            `💰 *Método:* ${methodLabel}\n` +
             `📅 *Meses:* desde ${dates[0]} hasta ${dates[dates.length - 1]}`;
         } else {
           reply = `✅ *Gasto Registrado*\n\n` +
             `💸 *Monto:* ${formatCurrency(amount, currency)}\n` +
             `📝 *Concepto:* ${note}\n` +
+            `💰 *Método:* ${methodLabel}\n` +
             `📅 *Fecha:* ${today}`;
         }
 

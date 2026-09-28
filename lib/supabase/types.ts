@@ -2,6 +2,7 @@ export type TransactionType = 'expense' | 'income';
 export type Currency = 'ARS' | 'USD';
 export type DebtType = 'owe' | 'owed';
 export type DebtStatus = 'active' | 'settled';
+export type PaymentMethod = 'efectivo' | 'tarjeta_credito' | 'tarjeta_debito' | 'transferencia' | 'otro';
 
 export interface Category {
   id: string;
@@ -20,6 +21,7 @@ export interface Transaction {
   category_id: string | null;
   date: string; // YYYY-MM-DD
   note: string | null;
+  payment_method?: PaymentMethod;
   installment_current: number | null;
   installment_total: number | null;
   parent_transaction_id: string | null;

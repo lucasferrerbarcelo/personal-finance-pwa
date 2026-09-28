@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Category, Currency, TransactionType } from '@/lib/supabase/types';
+import { Category, Currency, PaymentMethod, TransactionType } from '@/lib/supabase/types';
 import { Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { formatMonthYear } from '@/lib/utils';
 
@@ -14,6 +14,8 @@ interface TransactionFiltersProps {
   onTypeChange: (t: 'ALL' | TransactionType) => void;
   categoryFilter: string; // '' for all
   onCategoryChange: (catId: string) => void;
+  paymentMethodFilter?: 'ALL' | PaymentMethod;
+  onPaymentMethodChange?: (m: 'ALL' | PaymentMethod) => void;
   categories: Category[];
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -28,6 +30,8 @@ export function TransactionFilters({
   onTypeChange,
   categoryFilter,
   onCategoryChange,
+  paymentMethodFilter = 'ALL',
+  onPaymentMethodChange,
   categories,
   searchQuery,
   onSearchChange,
@@ -80,7 +84,7 @@ export function TransactionFilters({
       </div>
 
       {/* Filter Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         {/* Currency Filter */}
         <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
           {(['ALL', 'ARS', 'USD'] as const).map(c => (
@@ -120,7 +124,7 @@ export function TransactionFilters({
           <select
             value={categoryFilter}
             onChange={e => onCategoryChange(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
           >
             <option value="">Todas las categorías</option>
             {categories.map(cat => (
@@ -128,6 +132,22 @@ export function TransactionFilters({
                 {cat.name}
               </option>
             ))}
+          </select>
+        </div>
+
+        {/* Payment Method Dropdown */}
+        <div>
+          <select
+            value={paymentMethodFilter}
+            onChange={e => onPaymentMethodChange?.(e.target.value as any)}
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+          >
+            <option value="ALL">Todos los métodos</option>
+            <option value="transferencia">📱 Transferencia</option>
+            <option value="tarjeta_debito">💳 Débito</option>
+            <option value="tarjeta_credito">💳 Crédito</option>
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="otro">🔄 Otro</option>
           </select>
         </div>
       </div>

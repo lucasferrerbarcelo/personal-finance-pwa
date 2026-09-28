@@ -1,4 +1,4 @@
-import { Currency, DebtType } from '../supabase/types';
+import { Currency, DebtType, PaymentMethod } from '../supabase/types';
 
 export type ParsedTelegramCommand =
   | {
@@ -7,6 +7,7 @@ export type ParsedTelegramCommand =
       currency: Currency;
       note: string;
       installments: number;
+      paymentMethod: PaymentMethod;
     }
   | {
       type: 'DEBT';
@@ -39,6 +40,27 @@ export type ParsedTelegramCommand =
  */
 function clean(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Extracts payment method from text and returns cleaned string without payment keywords
+ */
+export function extractPaymentMethod(text: string): { method: PaymentMethod; cleaned: string } {
+  const patterns: [RegExp, PaymentMethod][] = [
+    [/\b(efectivo|cash)\b/i, 'efectivo'],
+    [/\b(tarjeta\s+de\s+d[eé]bito|tarjeta\s+d[eé]bito|d[eé]bito|debito)\b/i, 'tarjeta_debito'],
+    [/\b(tarjeta\s+de\s+cr[eé]dito|tarjeta\s+cr[eé]dito|cr[eé]dito|credito|visa|mastercard|master|amex|tarjeta)\b/i, 'tarjeta_credito'],
+    [/\b(transferencia|transf|mercadopago|mp)\b/i, 'transferencia'],
+  ];
+
+  for (const [regex, method] of patterns) {
+    if (regex.test(text)) {
+      const cleaned = clean(text.replace(regex, ''));
+      return { method, cleaned };
+    }
+  }
+
+  return { method: 'transferencia', cleaned: clean(text) };
 }
 
 /**
@@ -108,53 +130,59 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 6. Installments: "60000 zapatillas 3 cuotas", "60000 3 cuotas zapatillas"
-  const cuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(.+?)\s+(\d+)\s*cuotas?$/i;
+  // 6. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 3 cuotas zapatillas"
+  const cuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(.+?)\s+(\d+)\s*cuotas?(?:\s+(.+))?$/i;
   const cuotasMatch = trimmed.match(cuotasRegex);
   if (cuotasMatch) {
     const rawAmount = cuotasMatch[1].replace(',', '.');
     const amount = parseFloat(rawAmount);
-    const note = clean(cuotasMatch[2]);
+    const rawNote = clean(`${cuotasMatch[2]} ${cuotasMatch[4] || ''}`);
+    const { method, cleaned } = extractPaymentMethod(rawNote);
     const installments = parseInt(cuotasMatch[3], 10);
     const isUsd = /(?:usd|u\$s|dolares)/i.test(trimmed);
     return {
       type: 'EXPENSE',
       amount,
       currency: isUsd ? 'USD' : 'ARS',
-      note,
+      note: cleaned || 'Compra en cuotas',
       installments: installments > 0 ? installments : 1,
+      paymentMethod: method,
     };
   }
 
-  // Alt cuotas format: "60000 en 3 cuotas zapatillas" or "60000 3 cuotas zapatillas"
+  // Alt cuotas format: "60000 en 3 cuotas zapatillas credito" or "60000 3 cuotas zapatillas"
   const altCuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:en\s+)?(\d+)\s*cuotas?\s*(?:de\s+|para\s+)?(.+)$/i;
   const altCuotasMatch = trimmed.match(altCuotasRegex);
   if (altCuotasMatch) {
     const rawAmount = altCuotasMatch[1].replace(',', '.');
     const amount = parseFloat(rawAmount);
     const installments = parseInt(altCuotasMatch[2], 10);
-    const note = clean(altCuotasMatch[3]);
+    const rawNote = clean(altCuotasMatch[3]);
+    const { method, cleaned } = extractPaymentMethod(rawNote);
     const isUsd = /(?:usd|u\$s|dolares)/i.test(trimmed);
     return {
       type: 'EXPENSE',
       amount,
       currency: isUsd ? 'USD' : 'ARS',
-      note,
+      note: cleaned || 'Compra en cuotas',
       installments: installments > 0 ? installments : 1,
+      paymentMethod: method,
     };
   }
 
-  // 7. USD Expenses: "25 usd hosting", "usd 25 hosting", "25 u$s hosting"
+  // 7. USD Expenses: "25 usd hosting", "usd 25 hosting debito", "25 u$s hosting efectivo"
   const usdExpenseRegex1 = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|dolares)\s+(.+)$/i;
   const usdMatch1 = trimmed.match(usdExpenseRegex1);
   if (usdMatch1) {
     const amount = parseFloat(usdMatch1[1].replace(',', '.'));
+    const { method, cleaned } = extractPaymentMethod(usdMatch1[2]);
     return {
       type: 'EXPENSE',
       amount,
       currency: 'USD',
-      note: clean(usdMatch1[2]),
+      note: cleaned || 'Gasto USD',
       installments: 1,
+      paymentMethod: method,
     };
   }
 
@@ -162,28 +190,32 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
   const usdMatch2 = trimmed.match(usdExpenseRegex2);
   if (usdMatch2) {
     const amount = parseFloat(usdMatch2[1].replace(',', '.'));
+    const { method, cleaned } = extractPaymentMethod(usdMatch2[2]);
     return {
       type: 'EXPENSE',
       amount,
       currency: 'USD',
-      note: clean(usdMatch2[2]),
+      note: cleaned || 'Gasto USD',
       installments: 1,
+      paymentMethod: method,
     };
   }
 
-  // 8. General Expense: "3500 cafe", "$3500 cafe", "3500 almuerzo con amigos"
+  // 8. General Expense: "3500 cafe", "3500 cafe efectivo", "12000 nafta debito", "$3500 cafe"
   const generalExpenseRegex = /^\$?\s*(\d+(?:[.,]\d+)?)\s+(.+)$/;
   const generalMatch = trimmed.match(generalExpenseRegex);
   if (generalMatch) {
     const amount = parseFloat(generalMatch[1].replace(',', '.'));
     const isUsd = /(?:usd|u\$s)/i.test(generalMatch[2]);
-    const note = clean(generalMatch[2].replace(/(?:usd|u\$s|ars|\$)/gi, ''));
+    const rawNote = clean(generalMatch[2].replace(/(?:usd|u\$s|ars|\$)/gi, ''));
+    const { method, cleaned } = extractPaymentMethod(rawNote);
     return {
       type: 'EXPENSE',
       amount,
       currency: isUsd ? 'USD' : 'ARS',
-      note: note || 'Gasto registrado',
+      note: cleaned || 'Gasto registrado',
       installments: 1,
+      paymentMethod: method,
     };
   }
 

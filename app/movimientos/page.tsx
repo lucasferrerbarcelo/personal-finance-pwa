@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Transaction, Category, Currency, TransactionType } from '@/lib/supabase/types';
+import { Transaction, Category, Currency, PaymentMethod, TransactionType } from '@/lib/supabase/types';
 import { fetchTransactions, fetchCategories } from '@/lib/supabase/client';
 import { TransactionFilters } from '@/components/Movimientos/TransactionFilters';
 import { TransactionList } from '@/components/Movimientos/TransactionList';
@@ -21,6 +21,7 @@ export default function MovimientosPage() {
   const [currencyFilter, setCurrencyFilter] = useState<'ALL' | Currency>('ALL');
   const [typeFilter, setTypeFilter] = useState<'ALL' | TransactionType>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<'ALL' | PaymentMethod>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const loadData = async () => {
@@ -59,7 +60,10 @@ export default function MovimientosPage() {
       // 4. Category match
       if (categoryFilter && t.category_id !== categoryFilter) return false;
 
-      // 5. Search query
+      // 5. Payment method match
+      if (paymentMethodFilter !== 'ALL' && (t.payment_method || 'transferencia') !== paymentMethodFilter) return false;
+
+      // 6. Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const noteMatch = t.note?.toLowerCase().includes(query);
@@ -69,7 +73,7 @@ export default function MovimientosPage() {
 
       return true;
     });
-  }, [transactions, selectedMonth, currencyFilter, typeFilter, categoryFilter, searchQuery]);
+  }, [transactions, selectedMonth, currencyFilter, typeFilter, categoryFilter, paymentMethodFilter, searchQuery]);
 
   // Metrics for the filtered view
   const totalExpensesArs = filteredTransactions
@@ -158,6 +162,8 @@ export default function MovimientosPage() {
         onTypeChange={setTypeFilter}
         categoryFilter={categoryFilter}
         onCategoryChange={setCategoryFilter}
+        paymentMethodFilter={paymentMethodFilter}
+        onPaymentMethodChange={setPaymentMethodFilter}
         categories={categories}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}

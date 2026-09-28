@@ -5,6 +5,7 @@ import { Transaction, DebtSummary } from '@/lib/supabase/types';
 import { fetchTransactions, fetchDebts } from '@/lib/supabase/client';
 import { KpiCards } from '@/components/Dashboard/KpiCards';
 import { CategoryDonutChart } from '@/components/Dashboard/CategoryDonutChart';
+import { PaymentMethodBreakdown } from '@/components/Dashboard/PaymentMethodBreakdown';
 import { InstallmentSnapshot } from '@/components/Dashboard/InstallmentSnapshot';
 import { RecentTransactions } from '@/components/Dashboard/RecentTransactions';
 import { useApp } from '@/components/Layout/AppShell';
@@ -77,12 +78,18 @@ export default function DashboardPage() {
         currentMonthStr={currentMonthStr}
       />
 
-      {/* Grid: Category Donut & Installments Snapshot */}
+      {/* Grid: Category Donut, Payment Method Breakdown & Installments Snapshot */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CategoryDonutChart
-          transactions={transactions}
-          currentMonthStr={currentMonthStr}
-        />
+        <div className="flex flex-col gap-6">
+          <CategoryDonutChart
+            transactions={transactions}
+            currentMonthStr={currentMonthStr}
+          />
+          <PaymentMethodBreakdown
+            transactions={transactions}
+            currentMonthStr={currentMonthStr}
+          />
+        </div>
         <div className="flex flex-col gap-6">
           <InstallmentSnapshot transactions={transactions} />
           <RecentTransactions

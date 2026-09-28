@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { Database, Category, Transaction, DebtSummary, DebtPayment, Debt, DebtType, Currency, TransactionType } from './types';
+import { Database, Category, Transaction, DebtSummary, DebtPayment, Debt, DebtType, Currency, TransactionType, PaymentMethod } from './types';
 import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, INITIAL_DEBTS } from '../mockData';
 import { calculateInstallmentDates, getCurrentDateISO } from '../utils';
 
@@ -85,6 +85,7 @@ export interface CreateTransactionParams {
   category_id: string | null;
   date: string;
   note: string | null;
+  payment_method?: PaymentMethod;
   installments?: number; // total installments (1 = single payment)
 }
 
@@ -93,6 +94,7 @@ export async function createTransaction(params: CreateTransactionParams): Promis
   const amountPerInstallment = Number((params.amount / installments).toFixed(2));
   const dates = calculateInstallmentDates(params.date, installments);
   const parentId = installments > 1 ? `tx-${Date.now()}` : null;
+  const paymentMethod: PaymentMethod = params.payment_method || 'transferencia';
 
   const newRecords: Transaction[] = [];
 
@@ -108,6 +110,7 @@ export async function createTransaction(params: CreateTransactionParams): Promis
       category_id: params.category_id,
       date: dates[i],
       note: cleanNote,
+      payment_method: paymentMethod,
       installment_current: installments > 1 ? i + 1 : null,
       installment_total: installments > 1 ? installments : null,
       parent_transaction_id: installments > 1 ? parentId : null,
@@ -128,6 +131,7 @@ export async function createTransaction(params: CreateTransactionParams): Promis
           category_id: r.category_id,
           date: r.date,
           note: r.note,
+          payment_method: r.payment_method,
           installment_current: r.installment_current,
           installment_total: r.installment_total,
           parent_transaction_id: r.parent_transaction_id,
