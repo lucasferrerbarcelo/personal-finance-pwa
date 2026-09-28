@@ -13,6 +13,26 @@ export interface ParsedVoiceExpense {
   rawTranscription?: string;
 }
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function isTransientError(err: any): boolean {
+  const msg = (err?.message || '').toLowerCase();
+  const status = err?.status || err?.statusCode;
+  return (
+    status === 503 ||
+    status === 429 ||
+    msg.includes('503') ||
+    msg.includes('service unavailable') ||
+    msg.includes('high demand') ||
+    msg.includes('overloaded') ||
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('rate limit') ||
+    msg.includes('quota') ||
+    msg.includes('temporarily')
+  );
+}
+
 export async function processVoiceNoteWithGemini(
   audioBuffer: Buffer,
   mimeType: string,
@@ -68,21 +88,28 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
   const genAI = new GoogleGenerativeAI(apiKey);
   const base64Audio = audioBuffer.toString('base64');
 
-  // Candidate models: use gemini-3.8-flash as primary
-  const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
+  // Candidate models: start with gemini-3.8-flash, fallback to stable models
+  const candidateModels = [
+    'gemini-3.8-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-flash-8b',
+    'gemini-flash-latest',
+  ];
+
   let responseText = '';
   let lastError: any = null;
 
   for (const modelName of candidateModels) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      });
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+      },
+    });
 
+    const executeCall = async () => {
       const result = await model.generateContent([
         prompt,
         {
@@ -92,23 +119,43 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
           },
         },
       ]);
+      return result.response.text();
+    };
 
-      responseText = result.response.text();
+    try {
+      responseText = await executeCall();
       if (responseText) {
-        break; // Success
+        break; // Succeeded!
       }
     } catch (err: any) {
-      console.warn(`[Gemini Voice] Model ${modelName} failed:`, err?.message || err);
+      console.warn(`[Gemini Voice] Model ${modelName} initial attempt failed:`, err?.message || err);
       lastError = err;
-      // If error is 404 / not found, loop to next model
-      if (err?.message?.includes('404') || err?.message?.includes('not found')) {
-        continue;
+
+      // 1. Retry with 1.5s delay if transient (503 / 429 / high demand)
+      if (isTransientError(err)) {
+        console.info(`[Gemini Voice] Waiting 1.5s to retry on ${modelName}...`);
+        await delay(1500);
+
+        try {
+          responseText = await executeCall();
+          if (responseText) {
+            break; // Succeeded on retry!
+          }
+        } catch (retryErr: any) {
+          console.warn(`[Gemini Voice] Model ${modelName} retry also failed:`, retryErr?.message || retryErr);
+          lastError = retryErr;
+        }
       }
-      throw err;
+
+      // If this model didn't succeed, proceed to next candidate model
+      continue;
     }
   }
 
   if (!responseText) {
+    if (isTransientError(lastError)) {
+      throw new Error('GEMINI_HIGH_DEMAND');
+    }
     throw lastError || new Error('Gemini devolvió una respuesta vacía.');
   }
 

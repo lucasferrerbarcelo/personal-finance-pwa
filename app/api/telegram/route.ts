@@ -394,10 +394,28 @@ export async function POST(req: NextRequest) {
             );
             return NextResponse.json({ ok: true });
           }
+
+          const errMsg = (err?.message || '').toLowerCase();
+          if (
+            err.message === 'GEMINI_HIGH_DEMAND' ||
+            errMsg.includes('503') ||
+            errMsg.includes('high demand') ||
+            errMsg.includes('overloaded') ||
+            errMsg.includes('429') ||
+            errMsg.includes('resource_exhausted') ||
+            errMsg.includes('rate limit')
+          ) {
+            await sendTelegramMessage(
+              chatId,
+              '⚠️ El servicio de transcripción de voz está momentáneamente saturado. Por favor, volvé a enviar el audio en unos segundos o escribilo por texto.'
+            );
+            return NextResponse.json({ ok: true });
+          }
+
           console.error('[Gemini Voice Error]:', err);
           await sendTelegramMessage(
             chatId,
-            `⚠️ Error al procesar audio con Gemini: ${err.message || 'Error desconocido'}`
+            '⚠️ No pudimos procesar la nota de voz en este momento. Por favor intentá nuevamente en unos segundos o escribilo por texto.'
           );
           return NextResponse.json({ ok: true });
         }
