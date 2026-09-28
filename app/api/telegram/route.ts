@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseTelegramMessage } from '@/lib/telegram/parser';
-import { sendTelegramMessage } from '@/lib/telegram/bot';
+import { sendTelegramMessage, editTelegramMessageText, answerTelegramCallbackQuery } from '@/lib/telegram/bot';
 import { getServiceSupabase } from '@/lib/supabase/server';
 import { calculateInstallmentDates, formatCurrency, getCurrentDateISO } from '@/lib/utils';
-import { INITIAL_CATEGORIES } from '@/lib/mockData';
+import { PaymentMethod } from '@/lib/supabase/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +19,140 @@ export async function POST(req: NextRequest) {
   try {
     const update = await req.json();
 
-    // Telegram webhook payload structure: message: { chat: { id: ... }, text: ... }
+    // -------------------------------------------------------------
+    // 1. Handle Callback Queries (Interactive Inline Buttons)
+    // -------------------------------------------------------------
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const callbackId = cb.id;
+      const data = (cb.data || '') as string;
+      const chatId = cb.message?.chat?.id;
+      const messageId = cb.message?.message_id;
+      const fromId = cb.from?.id;
+
+      const allowedChatId = process.env.TELEGRAM_MY_CHAT_ID;
+      if (allowedChatId && String(fromId) !== String(allowedChatId)) {
+        await answerTelegramCallbackQuery(callbackId, '⛔ Acceso denegado', true);
+        return NextResponse.json({ ok: true, error: 'Unauthorized' }, { status: 403 });
+      }
+
+      const supabase = getServiceSupabase();
+      if (!supabase) {
+        await answerTelegramCallbackQuery(callbackId, '⚠️ Base de datos no disponible');
+        return NextResponse.json({ ok: true });
+      }
+
+      // 1.1 Undo transaction: undo_<ID>
+      const undoMatch = data.match(/^undo_(.+)$/);
+      if (undoMatch) {
+        const txId = undoMatch[1];
+        const { data: tx } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('id', txId)
+          .single();
+
+        if (!tx) {
+          await answerTelegramCallbackQuery(callbackId, 'El movimiento ya fue eliminado.');
+          if (chatId && messageId) {
+            await editTelegramMessageText(chatId, messageId, '🗑 *Este movimiento ya fue eliminado.*');
+          }
+          return NextResponse.json({ ok: true });
+        }
+
+        const amountFormatted = formatCurrency(Number(tx.amount), tx.currency);
+        const concept = tx.note || 'Gasto';
+
+        // Delete either by parent_transaction_id (if installments) or by id
+        if (tx.parent_transaction_id) {
+          await supabase.from('transactions').delete().eq('parent_transaction_id', tx.parent_transaction_id);
+        } else {
+          await supabase.from('transactions').delete().or(`id.eq.${txId},parent_transaction_id.eq.${txId}`);
+        }
+
+        await answerTelegramCallbackQuery(callbackId, 'Gasto eliminado');
+        if (chatId && messageId) {
+          await editTelegramMessageText(
+            chatId,
+            messageId,
+            `🗑 *Gasto de ${amountFormatted} eliminado correctamente.* (${concept})`
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // 1.2 Change payment method: pay_<ID>_<METODO>
+      const payMatch = data.match(/^pay_(.+)_(efectivo|tarjeta_debito|tarjeta_credito|transferencia|otro)$/);
+      if (payMatch) {
+        const txId = payMatch[1];
+        const newMethod = payMatch[2] as PaymentMethod;
+
+        const { data: tx } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('id', txId)
+          .single();
+
+        if (!tx) {
+          await answerTelegramCallbackQuery(callbackId, 'No se encontró la transacción');
+          return NextResponse.json({ ok: true });
+        }
+
+        // Update transaction and any related installment rows
+        await supabase.from('transactions').update({ payment_method: newMethod } as any).eq('id', txId);
+        if (tx.parent_transaction_id) {
+          await supabase
+            .from('transactions')
+            .update({ payment_method: newMethod } as any)
+            .eq('parent_transaction_id', tx.parent_transaction_id);
+        } else {
+          await supabase
+            .from('transactions')
+            .update({ payment_method: newMethod } as any)
+            .eq('parent_transaction_id', txId);
+        }
+
+        const methodLabels: Record<string, string> = {
+          efectivo: '💵 Efectivo',
+          tarjeta_credito: '💳 Crédito',
+          tarjeta_debito: '💳 Débito',
+          transferencia: '📲 Transf / MP',
+          otro: '🔄 Otro',
+        };
+        const methodLabel = methodLabels[newMethod] || newMethod;
+        const amountFormatted = formatCurrency(Number(tx.amount), tx.currency);
+        const concept = tx.note || 'Gasto';
+
+        await answerTelegramCallbackQuery(callbackId, `Método actualizado a ${methodLabel}`);
+
+        if (chatId && messageId) {
+          const updatedText = `✅ *Gasto registrado:*\n\n` +
+            `💸 *Monto:* ${amountFormatted}\n` +
+            `📝 *Concepto:* ${concept}\n` +
+            `💰 *Método:* ${methodLabel}`;
+
+          await editTelegramMessageText(chatId, messageId, updatedText, {
+            replyMarkup: {
+              inline_keyboard: [
+                [
+                  { text: '↩️ Deshacer gasto', callback_data: `undo_${txId}` },
+                ],
+              ],
+            },
+          });
+        }
+
+        return NextResponse.json({ ok: true });
+      }
+
+      // Fallback response for callback
+      await answerTelegramCallbackQuery(callbackId);
+      return NextResponse.json({ ok: true });
+    }
+
+    // -------------------------------------------------------------
+    // 2. Handle Text Messages
+    // -------------------------------------------------------------
     const message = update.message || update.edited_message;
     if (!message || !message.text) {
       return NextResponse.json({ ok: true });
@@ -46,19 +179,22 @@ export async function POST(req: NextRequest) {
     switch (command.type) {
       case 'HELP': {
         const helpMessage = `💡 *Comandos disponibles de Gastos y Finanzas:*\n\n` +
-          `• \`3500 cafe\` 👉 Registra gasto de $ 3.500 ARS\n` +
-          `• \`25 usd hosting\` 👉 Registra gasto de U$S 25 USD\n` +
-          `• \`60000 zapatillas 3 cuotas\` 👉 Divide $ 60.000 en 3 cuotas de $ 20.000\n` +
+          `• \`3500 cafe\` 👉 Registra gasto y te muestra botones para elegir método o deshacer\n` +
+          `• \`3500 cafe efectivo\` 👉 Registra gasto directamente en efectivo\n` +
+          `• \`12000 nafta debito\` 👉 Registra gasto con tarjeta de débito\n` +
+          `• \`60000 zapatillas 3 cuotas credito\` 👉 Compra en cuotas con tarjeta de crédito\n` +
+          `• \`25 usd hosting\` 👉 Registra gasto en USD\n` +
           `• \`debo 50000 mecanico\` 👉 Registra deuda que vos debés\n` +
           `• \`me debe 20000 juan\` 👉 Registra dinero que te deben\n` +
           `• \`pago 10000 deuda juan\` 👉 Registra pago y te dice cuánto resta\n` +
+          `• \`/deudas\` 👉 Muestra el estado de todas tus deudas activas\n` +
           `• \`/resumen\` 👉 Muestra el total gastado en el mes (ARS y USD)`;
         await sendTelegramMessage(chatId, helpMessage);
         break;
       }
 
       case 'EXPENSE': {
-        const { amount, currency, note, installments, paymentMethod } = command;
+        const { amount, currency, note, installments, paymentMethod, hasExplicitMethod } = command;
         const perInstallment = Number((amount / installments).toFixed(2));
         const dates = calculateInstallmentDates(today, installments);
 
@@ -66,10 +202,10 @@ export async function POST(req: NextRequest) {
           efectivo: '💵 Efectivo',
           tarjeta_credito: '💳 Tarjeta de Crédito',
           tarjeta_debito: '💳 Tarjeta de Débito',
-          transferencia: '📱 Transferencia',
+          transferencia: '📲 Transf / MP',
           otro: '🔄 Otro',
         };
-        const methodLabel = paymentMethodLabels[paymentMethod] || '📱 Transferencia';
+        const methodLabel = paymentMethodLabels[paymentMethod] || '📲 Transf / MP';
 
         // Find best category match or default
         let categoryId: string | null = null;
@@ -88,14 +224,16 @@ export async function POST(req: NextRequest) {
           if (match) categoryId = match.id;
         }
 
-        const parentId = installments > 1 ? crypto.randomUUID() : null;
+        const parentId = crypto.randomUUID();
+        const singleTxId = crypto.randomUUID();
+        const primaryId = installments > 1 ? parentId : singleTxId;
 
         if (supabase) {
           const recordsToInsert = [];
           for (let i = 0; i < installments; i++) {
             const installmentNote = installments > 1 ? `${note} (Cuota ${i + 1}/${installments})` : note;
             recordsToInsert.push({
-              id: installments > 1 && i === 0 ? parentId! : crypto.randomUUID(),
+              id: installments > 1 ? (i === 0 ? parentId : crypto.randomUUID()) : singleTxId,
               type: 'expense' as const,
               amount: perInstallment,
               currency,
@@ -132,7 +270,123 @@ export async function POST(req: NextRequest) {
             `📅 *Fecha:* ${today}`;
         }
 
-        await sendTelegramMessage(chatId, reply);
+        // Inline Keyboard configuration:
+        // If NO method specified: Fila 1 (Efectivo | Débito), Fila 2 (Crédito | Transf / MP), Fila 3 (Deshacer)
+        // If method WAS specified: Fila 3 (Deshacer)
+        const replyMarkup = !hasExplicitMethod
+          ? {
+              inline_keyboard: [
+                [
+                  { text: '💵 Efectivo', callback_data: `pay_${primaryId}_efectivo` },
+                  { text: '💳 Débito', callback_data: `pay_${primaryId}_tarjeta_debito` },
+                ],
+                [
+                  { text: '💳 Crédito', callback_data: `pay_${primaryId}_tarjeta_credito` },
+                  { text: '📲 Transf / MP', callback_data: `pay_${primaryId}_transferencia` },
+                ],
+                [
+                  { text: '↩️ Deshacer gasto', callback_data: `undo_${primaryId}` },
+                ],
+              ],
+            }
+          : {
+              inline_keyboard: [
+                [
+                  { text: '↩️ Deshacer gasto', callback_data: `undo_${primaryId}` },
+                ],
+              ],
+            };
+
+        await sendTelegramMessage(chatId, reply, { replyMarkup });
+        break;
+      }
+
+      case 'DEBTS_SUMMARY': {
+        if (!supabase) {
+          await sendTelegramMessage(chatId, '⚠️ Base de datos no disponible.');
+          break;
+        }
+
+        // Query active debts: try v_debts_summary first, then fallback to debts + debt_payments
+        let activeDebts: any[] = [];
+        const { data: viewData, error: viewError } = await supabase
+          .from('v_debts_summary')
+          .select('*')
+          .eq('status', 'active');
+
+        if (!viewError && viewData) {
+          activeDebts = viewData;
+        } else {
+          const { data: tableData } = await supabase
+            .from('debts')
+            .select('*, debt_payments(amount)')
+            .eq('status', 'active');
+
+          if (tableData) {
+            activeDebts = tableData.map((d: any) => {
+              const paid = (d.debt_payments as any[])?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+              return {
+                ...d,
+                total_paid: paid,
+                remaining_amount: Math.max(0, Number(d.total_amount) - paid),
+              };
+            });
+          }
+        }
+
+        if (activeDebts.length === 0) {
+          await sendTelegramMessage(chatId, '🎉 *¡No tenés deudas activas pendientes!*');
+          break;
+        }
+
+        const owedList = activeDebts.filter(d => d.type === 'owed'); // Te deben
+        const oweList = activeDebts.filter(d => d.type === 'owe');   // Debés
+
+        let totalTeDebenArs = 0;
+        let totalTeDebenUsd = 0;
+        let totalDebesArs = 0;
+        let totalDebesUsd = 0;
+
+        for (const d of owedList) {
+          const rem = Number(d.remaining_amount);
+          if (d.currency === 'USD') totalTeDebenUsd += rem;
+          else totalTeDebenArs += rem;
+        }
+
+        for (const d of oweList) {
+          const rem = Number(d.remaining_amount);
+          if (d.currency === 'USD') totalDebesUsd += rem;
+          else totalDebesArs += rem;
+        }
+
+        const netArs = totalTeDebenArs - totalDebesArs;
+        const netUsd = totalTeDebenUsd - totalDebesUsd;
+
+        let msg = `📋 *Estado de Deudas Activas*\n\n`;
+
+        if (owedList.length > 0) {
+          msg += `🟢 *Te deben:*\n`;
+          for (const d of owedList) {
+            msg += `• *${d.person_name}*: ${formatCurrency(Number(d.remaining_amount), d.currency)}\n`;
+          }
+          msg += `\n`;
+        }
+
+        if (oweList.length > 0) {
+          msg += `🔴 *Debés:*\n`;
+          for (const d of oweList) {
+            msg += `• *${d.person_name}*: ${formatCurrency(Number(d.remaining_amount), d.currency)}\n`;
+          }
+          msg += `\n`;
+        }
+
+        msg += `⚖️ *Balance Neto Pendiente:*\n`;
+        msg += `• ARS: ${netArs >= 0 ? '+' : ''}${formatCurrency(netArs, 'ARS')}\n`;
+        if (totalTeDebenUsd > 0 || totalDebesUsd > 0) {
+          msg += `• USD: ${netUsd >= 0 ? '+' : ''}${formatCurrency(netUsd, 'USD')}\n`;
+        }
+
+        await sendTelegramMessage(chatId, msg);
         break;
       }
 
@@ -287,11 +541,12 @@ export async function POST(req: NextRequest) {
           chatId,
           `🤔 No entendí el formato. Probá por ejemplo:\n` +
           `• \`3500 cafe\`\n` +
-          `• \`25 usd hosting\`\n` +
-          `• \`60000 zapatillas 3 cuotas\`\n` +
+          `• \`3500 cafe efectivo\`\n` +
+          `• \`60000 zapatillas 3 cuotas credito\`\n` +
           `• \`debo 50000 mecanico\`\n` +
           `• \`me debe 20000 juan\`\n` +
           `• \`pago 10000 deuda juan\`\n` +
+          `• \`/deudas\`\n` +
           `• \`/resumen\`\n\n` +
           `O escribí \`/ayuda\` para más detalles.`
         );

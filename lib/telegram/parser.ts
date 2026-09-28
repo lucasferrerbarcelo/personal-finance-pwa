@@ -8,6 +8,7 @@ export type ParsedTelegramCommand =
       note: string;
       installments: number;
       paymentMethod: PaymentMethod;
+      hasExplicitMethod: boolean;
     }
   | {
       type: 'DEBT';
@@ -16,6 +17,9 @@ export type ParsedTelegramCommand =
       amount: number;
       currency: Currency;
       note?: string;
+    }
+  | {
+      type: 'DEBTS_SUMMARY';
     }
   | {
       type: 'PAYMENT';
@@ -45,7 +49,11 @@ function clean(text: string): string {
 /**
  * Extracts payment method from text and returns cleaned string without payment keywords
  */
-export function extractPaymentMethod(text: string): { method: PaymentMethod; cleaned: string } {
+export function extractPaymentMethod(text: string): {
+  method: PaymentMethod;
+  cleaned: string;
+  hasExplicitMethod: boolean;
+} {
   const patterns: [RegExp, PaymentMethod][] = [
     [/\b(efectivo|cash)\b/i, 'efectivo'],
     [/\b(tarjeta\s+de\s+d[eé]bito|tarjeta\s+d[eé]bito|d[eé]bito|debito)\b/i, 'tarjeta_debito'],
@@ -56,11 +64,11 @@ export function extractPaymentMethod(text: string): { method: PaymentMethod; cle
   for (const [regex, method] of patterns) {
     if (regex.test(text)) {
       const cleaned = clean(text.replace(regex, ''));
-      return { method, cleaned };
+      return { method, cleaned, hasExplicitMethod: true };
     }
   }
 
-  return { method: 'transferencia', cleaned: clean(text) };
+  return { method: 'transferencia', cleaned: clean(text), hasExplicitMethod: false };
 }
 
 /**
@@ -80,7 +88,12 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     return { type: 'SUMMARY' };
   }
 
-  // 3. Payment to debt: "pago 10000 deuda juan", "pago 10000 juan", "pague 15000 carlos"
+  // 3. Debts list: "/deudas", "deudas", "/misdeudas"
+  if (['/deudas', 'deudas', '/misdeudas'].includes(lower)) {
+    return { type: 'DEBTS_SUMMARY' };
+  }
+
+  // 4. Payment to debt: "pago 10000 deuda juan", "pago 10000 juan", "pague 15000 carlos"
   const paymentRegex = /^(?:pago|pagu[eé]|abono)\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:deuda\s+)?(?:a\s+|de\s+)?(.+)$/i;
   const paymentMatch = trimmed.match(paymentRegex);
   if (paymentMatch) {
@@ -96,7 +109,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 4. Debt: "debo 50000 mecanico", "le debo 50000 al mecanico"
+  // 5. Debt: "debo 50000 mecanico", "le debo 50000 al mecanico"
   const deboRegex = /^(?:le\s+)?debo\s+(\d+(?:[.,]\d+)?)\s*(usd|u\$s|ars|\$)?\s*(?:a\s+|al\s+)?(.+)$/i;
   const deboMatch = trimmed.match(deboRegex);
   if (deboMatch) {
@@ -113,7 +126,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 5. Debt: "me debe 20000 juan", "me deben 20000 juan"
+  // 6. Debt: "me debe 20000 juan", "me deben 20000 juan"
   const meDebeRegex = /^me\s+deb(?:e|en)\s+(\d+(?:[.,]\d+)?)\s*(usd|u\$s|ars|\$)?\s*(?:de\s+)?(.+)$/i;
   const meDebeMatch = trimmed.match(meDebeRegex);
   if (meDebeMatch) {
@@ -130,14 +143,14 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 6. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 3 cuotas zapatillas"
+  // 7. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 3 cuotas zapatillas"
   const cuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(.+?)\s+(\d+)\s*cuotas?(?:\s+(.+))?$/i;
   const cuotasMatch = trimmed.match(cuotasRegex);
   if (cuotasMatch) {
     const rawAmount = cuotasMatch[1].replace(',', '.');
     const amount = parseFloat(rawAmount);
     const rawNote = clean(`${cuotasMatch[2]} ${cuotasMatch[4] || ''}`);
-    const { method, cleaned } = extractPaymentMethod(rawNote);
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(rawNote);
     const installments = parseInt(cuotasMatch[3], 10);
     const isUsd = /(?:usd|u\$s|dolares)/i.test(trimmed);
     return {
@@ -147,6 +160,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       note: cleaned || 'Compra en cuotas',
       installments: installments > 0 ? installments : 1,
       paymentMethod: method,
+      hasExplicitMethod,
     };
   }
 
@@ -158,7 +172,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     const amount = parseFloat(rawAmount);
     const installments = parseInt(altCuotasMatch[2], 10);
     const rawNote = clean(altCuotasMatch[3]);
-    const { method, cleaned } = extractPaymentMethod(rawNote);
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(rawNote);
     const isUsd = /(?:usd|u\$s|dolares)/i.test(trimmed);
     return {
       type: 'EXPENSE',
@@ -167,15 +181,16 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       note: cleaned || 'Compra en cuotas',
       installments: installments > 0 ? installments : 1,
       paymentMethod: method,
+      hasExplicitMethod,
     };
   }
 
-  // 7. USD Expenses: "25 usd hosting", "usd 25 hosting debito", "25 u$s hosting efectivo"
+  // 8. USD Expenses: "25 usd hosting", "usd 25 hosting debito", "25 u$s hosting efectivo"
   const usdExpenseRegex1 = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|dolares)\s+(.+)$/i;
   const usdMatch1 = trimmed.match(usdExpenseRegex1);
   if (usdMatch1) {
     const amount = parseFloat(usdMatch1[1].replace(',', '.'));
-    const { method, cleaned } = extractPaymentMethod(usdMatch1[2]);
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(usdMatch1[2]);
     return {
       type: 'EXPENSE',
       amount,
@@ -183,6 +198,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       note: cleaned || 'Gasto USD',
       installments: 1,
       paymentMethod: method,
+      hasExplicitMethod,
     };
   }
 
@@ -190,7 +206,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
   const usdMatch2 = trimmed.match(usdExpenseRegex2);
   if (usdMatch2) {
     const amount = parseFloat(usdMatch2[1].replace(',', '.'));
-    const { method, cleaned } = extractPaymentMethod(usdMatch2[2]);
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(usdMatch2[2]);
     return {
       type: 'EXPENSE',
       amount,
@@ -198,17 +214,18 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       note: cleaned || 'Gasto USD',
       installments: 1,
       paymentMethod: method,
+      hasExplicitMethod,
     };
   }
 
-  // 8. General Expense: "3500 cafe", "3500 cafe efectivo", "12000 nafta debito", "$3500 cafe"
+  // 9. General Expense: "3500 cafe", "3500 cafe efectivo", "12000 nafta debito", "$3500 cafe"
   const generalExpenseRegex = /^\$?\s*(\d+(?:[.,]\d+)?)\s+(.+)$/;
   const generalMatch = trimmed.match(generalExpenseRegex);
   if (generalMatch) {
     const amount = parseFloat(generalMatch[1].replace(',', '.'));
     const isUsd = /(?:usd|u\$s)/i.test(generalMatch[2]);
     const rawNote = clean(generalMatch[2].replace(/(?:usd|u\$s|ars|\$)/gi, ''));
-    const { method, cleaned } = extractPaymentMethod(rawNote);
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(rawNote);
     return {
       type: 'EXPENSE',
       amount,
@@ -216,6 +233,7 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       note: cleaned || 'Gasto registrado',
       installments: 1,
       paymentMethod: method,
+      hasExplicitMethod,
     };
   }
 

@@ -1,6 +1,7 @@
 import { parseTelegramMessage } from '../lib/telegram/parser';
 
 const tests = [
+  '3500 cafe',
   '3500 cafe efectivo',
   '12000 nafta debito',
   '60000 zapatillas 3 cuotas credito',
@@ -9,6 +10,7 @@ const tests = [
   'me debe 20000 juan',
   'pago 10000 deuda juan',
   '/resumen',
+  '/deudas',
 ];
 
 console.log('--- Testing Telegram Message Parser with Payment Methods ---');
