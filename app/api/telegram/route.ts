@@ -13,6 +13,7 @@ import { PaymentMethod } from '@/lib/supabase/types';
 import { INITIAL_CATEGORIES } from '@/lib/mockData';
 import { findBestCategory } from '@/lib/categories/matcher';
 import { processVoiceNoteWithGemini } from '@/lib/gemini/voice';
+import { processReceiptImageWithGemini } from '@/lib/gemini/receipt';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,8 +87,9 @@ function formatExpenseMessage(params: {
   installments?: number;
   perInstallment?: number;
   dates?: string[];
+  isReceipt?: boolean;
 }) {
-  const { amount, currency, concept, categoryName, methodLabel, installments, perInstallment, dates } = params;
+  const { amount, currency, concept, categoryName, methodLabel, installments, perInstallment, dates, isReceipt } = params;
 
   if (installments && installments > 1 && perInstallment && dates) {
     return (
@@ -97,6 +99,16 @@ function formatExpenseMessage(params: {
       `📂 *Categoría:* ${categoryName}\n` +
       `💳 *Método:* ${methodLabel}\n` +
       `📅 *Meses:* desde ${dates[0]} hasta ${dates[dates.length - 1]}`
+    );
+  }
+
+  if (isReceipt) {
+    return (
+      `🧾 *Ticket procesado con éxito:*\n\n` +
+      `💰 *Monto:* ${formatCurrency(amount, currency)}\n` +
+      `🏷 *Concepto:* ${concept}\n` +
+      `📂 *Categoría:* ${categoryName}\n` +
+      `💳 *Método:* ${methodLabel}`
     );
   }
 
@@ -251,12 +263,14 @@ export async function POST(req: NextRequest) {
           await answerTelegramCallbackQuery(callbackId, `Categoría: ${targetCat.name}`);
 
           if (chatId && messageId && tx) {
+            const isReceipt = (cb.message?.text || '').includes('Ticket procesado');
             const updatedText = formatExpenseMessage({
               amount: Number(tx.amount),
               currency: tx.currency,
               concept: tx.note || 'Gasto',
               categoryName: targetCat.name,
               methodLabel,
+              isReceipt,
             });
 
             await editTelegramMessageText(chatId, messageId, updatedText, {
@@ -307,12 +321,14 @@ export async function POST(req: NextRequest) {
         await answerTelegramCallbackQuery(callbackId, `Método: ${methodLabel}`);
 
         if (chatId && messageId) {
+          const isReceipt = (cb.message?.text || '').includes('Ticket procesado');
           const updatedText = formatExpenseMessage({
             amount: Number(tx.amount),
             currency: tx.currency,
             concept: tx.note || 'Gasto',
             categoryName: catName,
             methodLabel,
+            isReceipt,
           });
 
           await editTelegramMessageText(chatId, messageId, updatedText, {
@@ -490,7 +506,129 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------
-    // 2.2 Text Message Handling
+    // 2.2 Photo / Receipt to Expense (OCR Image-to-Expense)
+    // -------------------------------------------------------------
+    const photos = message.photo;
+    const document = message.document;
+    const isImageDoc = document?.mime_type?.startsWith('image/');
+
+    if ((photos && photos.length > 0) || isImageDoc) {
+      try {
+        const fileId = photos && photos.length > 0
+          ? photos[photos.length - 1].file_id
+          : document!.file_id;
+
+        const fileInfo = await getTelegramFile(fileId);
+        if (!fileInfo) {
+          await sendTelegramMessage(chatId, '⚠️ No se pudo obtener la imagen de Telegram.');
+          return NextResponse.json({ ok: true });
+        }
+
+        const imageBuffer = await downloadTelegramFile(fileInfo.filePath);
+        if (!imageBuffer) {
+          await sendTelegramMessage(chatId, '⚠️ No se pudo descargar la imagen del comprobante.');
+          return NextResponse.json({ ok: true });
+        }
+
+        const mimeType = isImageDoc ? (document!.mime_type || 'image/jpeg') : 'image/jpeg';
+
+        let parsedReceipt;
+        try {
+          parsedReceipt = await processReceiptImageWithGemini(
+            imageBuffer,
+            mimeType,
+            categoriesList
+          );
+        } catch (err: any) {
+          if (err.message === 'GEMINI_API_KEY_NOT_CONFIGURED') {
+            await sendTelegramMessage(
+              chatId,
+              '📸 *Recibí tu comprobante*, pero falta configurar la variable `GEMINI_API_KEY` en tu `.env.local` o variables de entorno de Vercel para procesar imágenes con IA.'
+            );
+            return NextResponse.json({ ok: true });
+          }
+
+          const errMsg = (err?.message || '').toLowerCase();
+          if (
+            err.message === 'GEMINI_HIGH_DEMAND' ||
+            errMsg.includes('503') ||
+            errMsg.includes('high demand') ||
+            errMsg.includes('overloaded') ||
+            errMsg.includes('429') ||
+            errMsg.includes('resource_exhausted') ||
+            errMsg.includes('rate limit')
+          ) {
+            await sendTelegramMessage(
+              chatId,
+              '⚠️ El servicio de reconocimiento de imágenes está momentáneamente saturado. Por favor, volvé a enviar la foto en unos segundos.'
+            );
+            return NextResponse.json({ ok: true });
+          }
+
+          console.error('[Gemini Receipt Error]:', err);
+          await sendTelegramMessage(
+            chatId,
+            '⚠️ No pudimos procesar la imagen en este momento. Por favor intentá nuevamente sacando una foto más clara o cargalo por texto.'
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        if (!parsedReceipt || parsedReceipt.confidence === 'low' || parsedReceipt.amount <= 0) {
+          await sendTelegramMessage(
+            chatId,
+            '⚠️ No pude detectar un monto total en la imagen. Probá sacar la foto más de cerca o con mejor iluminación.'
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        const { amount, currency, concept, payment_method, category_id, category_name } = parsedReceipt;
+        const txId = crypto.randomUUID();
+
+        if (supabase) {
+          const { error: insErr } = await supabase.from('transactions').insert({
+            id: txId,
+            type: 'expense',
+            amount,
+            currency,
+            category_id,
+            date: today,
+            note: concept,
+            payment_method,
+          } as any);
+
+          if (insErr) {
+            console.error('[Telegram Webhook] Error inserting receipt transaction:', insErr);
+            await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${insErr.message}`);
+            return NextResponse.json({ ok: true });
+          }
+        }
+
+        const methodLabel = PAYMENT_METHOD_LABELS[payment_method] || '📲 Transf / MP';
+        const catName = category_name || 'General';
+
+        const reply = formatExpenseMessage({
+          amount,
+          currency,
+          concept,
+          categoryName: catName,
+          methodLabel,
+          isReceipt: true,
+        });
+
+        await sendTelegramMessage(chatId, reply, {
+          replyMarkup: getMainTransactionKeyboard(txId),
+        });
+
+        return NextResponse.json({ ok: true });
+      } catch (photoErr: any) {
+        console.error('[Telegram Photo Handler Global Error]:', photoErr);
+        await sendTelegramMessage(chatId, `⚠️ Error al procesar imagen: ${photoErr.message || 'Error desconocido'}`);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2.3 Text Message Handling
     // -------------------------------------------------------------
     const text = message.text;
     if (!text) {
@@ -502,6 +640,7 @@ export async function POST(req: NextRequest) {
     switch (command.type) {
       case 'HELP': {
         const helpMessage = `💡 *Comandos disponibles de Gastos y Finanzas:*\n\n` +
+          `• 📸 *Fotos de Tickets:* Mandá una foto o factura para registrarla automáticamente\n` +
           `• 🎙 *Notas de voz:* Mandá un audio diciendo tu gasto (ej: _"Gasté 4500 en el súper en efectivo"_)\n` +
           `• \`3500 cafe\` 👉 Registra gasto con botones interactivos\n` +
           `• \`3500 cafe efectivo\` 👉 Registra gasto directamente en efectivo\n` +
