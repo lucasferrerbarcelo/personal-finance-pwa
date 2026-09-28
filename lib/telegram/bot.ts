@@ -172,3 +172,35 @@ export async function answerTelegramCallbackQuery(
     return false;
   }
 }
+
+export async function getTelegramFile(fileId: string): Promise<{ filePath: string } | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.ok || !data.result?.file_path) return null;
+    return { filePath: data.result.file_path };
+  } catch (err) {
+    console.error('[Telegram Bot] Error in getTelegramFile:', err);
+    return null;
+  }
+}
+
+export async function downloadTelegramFile(filePath: string): Promise<Buffer | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+
+  try {
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    console.error('[Telegram Bot] Error in downloadTelegramFile:', err);
+    return null;
+  }
+}
+

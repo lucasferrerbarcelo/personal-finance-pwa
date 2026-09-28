@@ -1,11 +1,113 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseTelegramMessage } from '@/lib/telegram/parser';
-import { sendTelegramMessage, editTelegramMessageText, answerTelegramCallbackQuery } from '@/lib/telegram/bot';
+import {
+  sendTelegramMessage,
+  editTelegramMessageText,
+  answerTelegramCallbackQuery,
+  getTelegramFile,
+  downloadTelegramFile,
+} from '@/lib/telegram/bot';
 import { getServiceSupabase } from '@/lib/supabase/server';
 import { calculateInstallmentDates, formatCurrency, getCurrentDateISO } from '@/lib/utils';
 import { PaymentMethod } from '@/lib/supabase/types';
+import { INITIAL_CATEGORIES } from '@/lib/mockData';
+import { findBestCategory } from '@/lib/categories/matcher';
+import { processVoiceNoteWithGemini } from '@/lib/gemini/voice';
 
 export const dynamic = 'force-dynamic';
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  efectivo: '💵 Efectivo',
+  tarjeta_credito: '💳 Tarjeta de Crédito',
+  tarjeta_debito: '💳 Tarjeta de Débito',
+  transferencia: '📲 Transf / MP',
+  otro: '🔄 Otro',
+};
+
+function getCategoryEmoji(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes('super')) return '🛒';
+  if (lower.includes('comida') || lower.includes('salidas')) return '🍔';
+  if (lower.includes('transporte') || lower.includes('combustible')) return '🚗';
+  if (lower.includes('servicio') || lower.includes('impuesto')) return '🧾';
+  if (lower.includes('salud') || lower.includes('farmacia')) return '💊';
+  if (lower.includes('indumentaria') || lower.includes('ropa')) return '👕';
+  if (lower.includes('tecnología') || lower.includes('gadget')) return '💻';
+  if (lower.includes('entretenimiento')) return '🍿';
+  if (lower.includes('educación')) return '🎓';
+  return '📦';
+}
+
+function getMainTransactionKeyboard(txId: string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '💵 Efectivo', callback_data: `pay_${txId}_efectivo` },
+        { text: '💳 Débito', callback_data: `pay_${txId}_tarjeta_debito` },
+      ],
+      [
+        { text: '💳 Crédito', callback_data: `pay_${txId}_tarjeta_credito` },
+        { text: '📲 Transf / MP', callback_data: `pay_${txId}_transferencia` },
+      ],
+      [
+        { text: '🏷 Cambiar categoría', callback_data: `cat_menu_${txId}` },
+        { text: '↩️ Deshacer', callback_data: `undo_${txId}` },
+      ],
+    ],
+  };
+}
+
+function getCategoriesKeyboard(txId: string, categories: Array<{ id: string; name: string }>) {
+  const keyboard: Array<Array<{ text: string; callback_data: string }>> = [];
+  const chunkSize = 2;
+
+  for (let i = 0; i < categories.length; i += chunkSize) {
+    const row = categories.slice(i, i + chunkSize).map(c => ({
+      text: `${getCategoryEmoji(c.name)} ${c.name}`,
+      callback_data: `sc_${txId}_${c.id.slice(0, 8)}`,
+    }));
+    keyboard.push(row);
+  }
+
+  // Back button
+  keyboard.push([
+    { text: '⬅️ Volver a métodos', callback_data: `pay_menu_${txId}` },
+  ]);
+
+  return { inline_keyboard: keyboard };
+}
+
+function formatExpenseMessage(params: {
+  amount: number;
+  currency: 'ARS' | 'USD';
+  concept: string;
+  categoryName: string;
+  methodLabel: string;
+  installments?: number;
+  perInstallment?: number;
+  dates?: string[];
+}) {
+  const { amount, currency, concept, categoryName, methodLabel, installments, perInstallment, dates } = params;
+
+  if (installments && installments > 1 && perInstallment && dates) {
+    return (
+      `✅ *Gasto en Cuotas Registrado*\n\n` +
+      `💸 *Total:* ${formatCurrency(amount, currency)} (${installments} cuotas de ${formatCurrency(perInstallment, currency)})\n` +
+      `📝 *Concepto:* ${concept}\n` +
+      `📂 *Categoría:* ${categoryName}\n` +
+      `💳 *Método:* ${methodLabel}\n` +
+      `📅 *Meses:* desde ${dates[0]} hasta ${dates[dates.length - 1]}`
+    );
+  }
+
+  return (
+    `✅ *Gasto registrado:*\n\n` +
+    `💸 *Monto:* ${formatCurrency(amount, currency)}\n` +
+    `📝 *Concepto:* ${concept}\n` +
+    `📂 *Categoría:* ${categoryName}\n` +
+    `💳 *Método:* ${methodLabel}`
+  );
+}
 
 export async function GET() {
   return NextResponse.json({
@@ -75,13 +177,100 @@ export async function POST(req: NextRequest) {
           await editTelegramMessageText(
             chatId,
             messageId,
-            `🗑 *Gasto de ${amountFormatted} eliminado correctamente.* (${concept})`
+            `🗑 *Gasto de ${amountFormatted} eliminado correctamente.* (${concept})`,
+            { replyMarkup: { inline_keyboard: [] } }
           );
         }
         return NextResponse.json({ ok: true });
       }
 
-      // 1.2 Change payment method: pay_<ID>_<METODO>
+      // 1.2 Open Category Menu: cat_menu_<ID>
+      const catMenuMatch = data.match(/^cat_menu_(.+)$/);
+      if (catMenuMatch) {
+        const txId = catMenuMatch[1];
+        const { data: dbCategories } = await supabase.from('categories').select('*').eq('type', 'expense');
+        const categoriesList = (dbCategories && dbCategories.length > 0
+          ? dbCategories
+          : INITIAL_CATEGORIES.filter(c => c.type === 'expense')) as Array<{ id: string; name: string }>;
+
+        await answerTelegramCallbackQuery(callbackId);
+        if (chatId && messageId) {
+          await editTelegramMessageText(
+            chatId,
+            messageId,
+            cb.message?.text || 'Elegí la categoría para este gasto:',
+            { replyMarkup: getCategoriesKeyboard(txId, categoriesList) }
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // 1.3 Back to Payment Menu: pay_menu_<ID>
+      const payMenuMatch = data.match(/^pay_menu_(.+)$/);
+      if (payMenuMatch) {
+        const txId = payMenuMatch[1];
+        await answerTelegramCallbackQuery(callbackId);
+        if (chatId && messageId) {
+          await editTelegramMessageText(
+            chatId,
+            messageId,
+            cb.message?.text || 'Gasto registrado:',
+            { replyMarkup: getMainTransactionKeyboard(txId) }
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // 1.4 Select Category: sc_<ID>_<SHORT_CAT_ID>
+      const setCatMatch = data.match(/^sc_(.+)_(.+)$/);
+      if (setCatMatch) {
+        const txId = setCatMatch[1];
+        const shortCatId = setCatMatch[2];
+
+        const { data: dbCategories } = await supabase.from('categories').select('*').eq('type', 'expense');
+        const categoriesList = (dbCategories && dbCategories.length > 0
+          ? dbCategories
+          : INITIAL_CATEGORIES.filter(c => c.type === 'expense')) as Array<{ id: string; name: string }>;
+
+        const targetCat = categoriesList.find(c => c.id.startsWith(shortCatId));
+
+        if (targetCat) {
+          // Update transaction
+          await supabase.from('transactions').update({ category_id: targetCat.id } as any).eq('id', txId);
+          await supabase.from('transactions').update({ category_id: targetCat.id } as any).eq('parent_transaction_id', txId);
+
+          const { data: tx } = await supabase
+            .from('transactions')
+            .select('*, category:categories(*)')
+            .eq('id', txId)
+            .single();
+
+          const method = (tx?.payment_method || 'transferencia') as PaymentMethod;
+          const methodLabel = PAYMENT_METHOD_LABELS[method] || method;
+
+          await answerTelegramCallbackQuery(callbackId, `Categoría: ${targetCat.name}`);
+
+          if (chatId && messageId && tx) {
+            const updatedText = formatExpenseMessage({
+              amount: Number(tx.amount),
+              currency: tx.currency,
+              concept: tx.note || 'Gasto',
+              categoryName: targetCat.name,
+              methodLabel,
+            });
+
+            await editTelegramMessageText(chatId, messageId, updatedText, {
+              replyMarkup: getMainTransactionKeyboard(txId),
+            });
+          }
+        } else {
+          await answerTelegramCallbackQuery(callbackId, 'Categoría no encontrada');
+        }
+
+        return NextResponse.json({ ok: true });
+      }
+
+      // 1.5 Change payment method: pay_<ID>_<METODO>
       const payMatch = data.match(/^pay_(.+)_(efectivo|tarjeta_debito|tarjeta_credito|transferencia|otro)$/);
       if (payMatch) {
         const txId = payMatch[1];
@@ -89,7 +278,7 @@ export async function POST(req: NextRequest) {
 
         const { data: tx } = await supabase
           .from('transactions')
-          .select('*')
+          .select('*, category:categories(*)')
           .eq('id', txId)
           .single();
 
@@ -112,33 +301,22 @@ export async function POST(req: NextRequest) {
             .eq('parent_transaction_id', txId);
         }
 
-        const methodLabels: Record<string, string> = {
-          efectivo: '💵 Efectivo',
-          tarjeta_credito: '💳 Crédito',
-          tarjeta_debito: '💳 Débito',
-          transferencia: '📲 Transf / MP',
-          otro: '🔄 Otro',
-        };
-        const methodLabel = methodLabels[newMethod] || newMethod;
-        const amountFormatted = formatCurrency(Number(tx.amount), tx.currency);
-        const concept = tx.note || 'Gasto';
+        const methodLabel = PAYMENT_METHOD_LABELS[newMethod] || newMethod;
+        const catName = tx.category?.name || 'General';
 
-        await answerTelegramCallbackQuery(callbackId, `Método actualizado a ${methodLabel}`);
+        await answerTelegramCallbackQuery(callbackId, `Método: ${methodLabel}`);
 
         if (chatId && messageId) {
-          const updatedText = `✅ *Gasto registrado:*\n\n` +
-            `💸 *Monto:* ${amountFormatted}\n` +
-            `📝 *Concepto:* ${concept}\n` +
-            `💰 *Método:* ${methodLabel}`;
+          const updatedText = formatExpenseMessage({
+            amount: Number(tx.amount),
+            currency: tx.currency,
+            concept: tx.note || 'Gasto',
+            categoryName: catName,
+            methodLabel,
+          });
 
           await editTelegramMessageText(chatId, messageId, updatedText, {
-            replyMarkup: {
-              inline_keyboard: [
-                [
-                  { text: '↩️ Deshacer gasto', callback_data: `undo_${txId}` },
-                ],
-              ],
-            },
+            replyMarkup: getMainTransactionKeyboard(txId),
           });
         }
 
@@ -151,10 +329,10 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------
-    // 2. Handle Text Messages
+    // 2. Handle Messages (Voice or Text)
     // -------------------------------------------------------------
     const message = update.message || update.edited_message;
-    if (!message || !message.text) {
+    if (!message) {
       return NextResponse.json({ ok: true });
     }
 
@@ -171,15 +349,143 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, error: 'Unauthorized' }, { status: 403 });
     }
 
-    const text = message.text;
-    const command = parseTelegramMessage(text);
     const supabase = getServiceSupabase();
     const today = getCurrentDateISO();
+
+    // Fetch existing categories from Supabase (or fallback)
+    let categoriesList: Array<{ id: string; name: string }> = INITIAL_CATEGORIES.filter(c => c.type === 'expense');
+    if (supabase) {
+      const { data: dbCats } = await supabase.from('categories').select('*').eq('type', 'expense');
+      if (dbCats && dbCats.length > 0) {
+        categoriesList = dbCats as Array<{ id: string; name: string }>;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2.1 Voice Note to Expense (Voice-to-Expense)
+    // -------------------------------------------------------------
+    const voice = message.voice || message.audio;
+    if (voice) {
+      try {
+        const fileInfo = await getTelegramFile(voice.file_id);
+        if (!fileInfo) {
+          await sendTelegramMessage(chatId, '⚠️ No se pudo obtener el archivo de audio de Telegram.');
+          return NextResponse.json({ ok: true });
+        }
+
+        const audioBuffer = await downloadTelegramFile(fileInfo.filePath);
+        if (!audioBuffer) {
+          await sendTelegramMessage(chatId, '⚠️ No se pudo descargar la nota de voz.');
+          return NextResponse.json({ ok: true });
+        }
+
+        let parsedVoice;
+        try {
+          parsedVoice = await processVoiceNoteWithGemini(
+            audioBuffer,
+            voice.mime_type || 'audio/ogg',
+            categoriesList
+          );
+        } catch (err: any) {
+          if (err.message === 'GEMINI_API_KEY_NOT_CONFIGURED') {
+            await sendTelegramMessage(
+              chatId,
+              '🎙 *Recibí tu nota de voz*, pero falta configurar la variable `GEMINI_API_KEY` en tu `.env.local` o variables de entorno de Vercel para procesar audios con IA.'
+            );
+            return NextResponse.json({ ok: true });
+          }
+          console.error('[Gemini Voice Error]:', err);
+          await sendTelegramMessage(
+            chatId,
+            `⚠️ Error al procesar audio con Gemini: ${err.message || 'Error desconocido'}`
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        if (!parsedVoice || parsedVoice.amount <= 0) {
+          await sendTelegramMessage(
+            chatId,
+            `🤔 No pude identificar un monto en el audio. Por favor intentá diciendo claramente el monto y concepto (ej: *"Gasté 3500 en café con medialunas en efectivo"*).`
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        const { amount, currency, concept, payment_method, category_id, category_name, installments } = parsedVoice;
+        const perInstallment = Number((amount / installments).toFixed(2));
+        const dates = calculateInstallmentDates(today, installments);
+
+        const parentId = crypto.randomUUID();
+        const singleTxId = crypto.randomUUID();
+        const primaryId = installments > 1 ? parentId : singleTxId;
+
+        if (supabase) {
+          const recordsToInsert = [];
+          for (let i = 0; i < installments; i++) {
+            const installmentNote = installments > 1 ? `${concept} (Cuota ${i + 1}/${installments})` : concept;
+            recordsToInsert.push({
+              id: installments > 1 ? (i === 0 ? parentId : crypto.randomUUID()) : singleTxId,
+              type: 'expense' as const,
+              amount: perInstallment,
+              currency,
+              category_id,
+              date: dates[i],
+              note: installmentNote,
+              payment_method,
+              installment_current: installments > 1 ? i + 1 : null,
+              installment_total: installments > 1 ? installments : null,
+              parent_transaction_id: installments > 1 ? parentId : null,
+            });
+          }
+
+          const { error: insErr } = await supabase.from('transactions').insert(recordsToInsert as any);
+          if (insErr) {
+            console.error('[Telegram Webhook] Error inserting voice transaction:', insErr);
+            await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${insErr.message}`);
+            return NextResponse.json({ ok: true });
+          }
+        }
+
+        const methodLabel = PAYMENT_METHOD_LABELS[payment_method] || '📲 Transf / MP';
+        const catName = category_name || 'General';
+
+        const reply = formatExpenseMessage({
+          amount,
+          currency,
+          concept,
+          categoryName: catName,
+          methodLabel,
+          installments,
+          perInstallment,
+          dates,
+        });
+
+        await sendTelegramMessage(chatId, reply, {
+          replyMarkup: getMainTransactionKeyboard(primaryId),
+        });
+
+        return NextResponse.json({ ok: true });
+      } catch (voiceErr: any) {
+        console.error('[Telegram Voice Handler Global Error]:', voiceErr);
+        await sendTelegramMessage(chatId, `⚠️ Error al procesar audio: ${voiceErr.message || 'Error desconocido'}`);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2.2 Text Message Handling
+    // -------------------------------------------------------------
+    const text = message.text;
+    if (!text) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const command = parseTelegramMessage(text);
 
     switch (command.type) {
       case 'HELP': {
         const helpMessage = `💡 *Comandos disponibles de Gastos y Finanzas:*\n\n` +
-          `• \`3500 cafe\` 👉 Registra gasto y te muestra botones para elegir método o deshacer\n` +
+          `• 🎙 *Notas de voz:* Mandá un audio diciendo tu gasto (ej: _"Gasté 4500 en el súper en efectivo"_)\n` +
+          `• \`3500 cafe\` 👉 Registra gasto con botones interactivos\n` +
           `• \`3500 cafe efectivo\` 👉 Registra gasto directamente en efectivo\n` +
           `• \`12000 nafta debito\` 👉 Registra gasto con tarjeta de débito\n` +
           `• \`60000 zapatillas 3 cuotas credito\` 👉 Compra en cuotas con tarjeta de crédito\n` +
@@ -194,35 +500,16 @@ export async function POST(req: NextRequest) {
       }
 
       case 'EXPENSE': {
-        const { amount, currency, note, installments, paymentMethod, hasExplicitMethod } = command;
+        const { amount, currency, note, installments, paymentMethod } = command;
         const perInstallment = Number((amount / installments).toFixed(2));
         const dates = calculateInstallmentDates(today, installments);
 
-        const paymentMethodLabels: Record<string, string> = {
-          efectivo: '💵 Efectivo',
-          tarjeta_credito: '💳 Tarjeta de Crédito',
-          tarjeta_debito: '💳 Tarjeta de Débito',
-          transferencia: '📲 Transf / MP',
-          otro: '🔄 Otro',
-        };
-        const methodLabel = paymentMethodLabels[paymentMethod] || '📲 Transf / MP';
+        const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod] || '📲 Transf / MP';
 
-        // Find best category match or default
-        let categoryId: string | null = null;
-        if (supabase) {
-          const { data: categories } = await supabase.from('categories').select('*').eq('type', 'expense');
-          const categoriesList = (categories || []) as unknown as { id: string; name: string }[];
-          const lowerNote = note.toLowerCase();
-          const match = categoriesList.find(c => {
-            const catName = c.name.toLowerCase();
-            return lowerNote.includes(catName) || catName.includes(lowerNote) ||
-              (catName.includes('comida') && (lowerNote.includes('cafe') || lowerNote.includes('almuerzo') || lowerNote.includes('cena') || lowerNote.includes('bar'))) ||
-              (catName.includes('supermercado') && (lowerNote.includes('coto') || lowerNote.includes('super') || lowerNote.includes('chino') || lowerNote.includes('carrefour'))) ||
-              (catName.includes('tecnología') && (lowerNote.includes('hosting') || lowerNote.includes('monitor') || lowerNote.includes('apple') || lowerNote.includes('pc'))) ||
-              (catName.includes('indumentaria') && (lowerNote.includes('zapatillas') || lowerNote.includes('remera') || lowerNote.includes('pantalon') || lowerNote.includes('ropa')));
-          });
-          if (match) categoryId = match.id;
-        }
+        // Intelligent category assignment
+        const matchedCategory = findBestCategory(note, categoriesList);
+        const categoryId = matchedCategory?.id || null;
+        const categoryName = matchedCategory?.name || 'General';
 
         const parentId = crypto.randomUUID();
         const singleTxId = crypto.randomUUID();
@@ -255,49 +542,21 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        let reply = '';
-        if (installments > 1) {
-          reply = `✅ *Gasto en Cuotas Registrado*\n\n` +
-            `📦 *Concepto:* ${note}\n` +
-            `💳 *Total:* ${formatCurrency(amount, currency)} (${installments} cuotas de ${formatCurrency(perInstallment, currency)})\n` +
-            `💰 *Método:* ${methodLabel}\n` +
-            `📅 *Meses:* desde ${dates[0]} hasta ${dates[dates.length - 1]}`;
-        } else {
-          reply = `✅ *Gasto Registrado*\n\n` +
-            `💸 *Monto:* ${formatCurrency(amount, currency)}\n` +
-            `📝 *Concepto:* ${note}\n` +
-            `💰 *Método:* ${methodLabel}\n` +
-            `📅 *Fecha:* ${today}`;
-        }
+        const reply = formatExpenseMessage({
+          amount,
+          currency,
+          concept: note,
+          categoryName,
+          methodLabel,
+          installments,
+          perInstallment,
+          dates,
+        });
 
-        // Inline Keyboard configuration:
-        // If NO method specified: Fila 1 (Efectivo | Débito), Fila 2 (Crédito | Transf / MP), Fila 3 (Deshacer)
-        // If method WAS specified: Fila 3 (Deshacer)
-        const replyMarkup = !hasExplicitMethod
-          ? {
-              inline_keyboard: [
-                [
-                  { text: '💵 Efectivo', callback_data: `pay_${primaryId}_efectivo` },
-                  { text: '💳 Débito', callback_data: `pay_${primaryId}_tarjeta_debito` },
-                ],
-                [
-                  { text: '💳 Crédito', callback_data: `pay_${primaryId}_tarjeta_credito` },
-                  { text: '📲 Transf / MP', callback_data: `pay_${primaryId}_transferencia` },
-                ],
-                [
-                  { text: '↩️ Deshacer gasto', callback_data: `undo_${primaryId}` },
-                ],
-              ],
-            }
-          : {
-              inline_keyboard: [
-                [
-                  { text: '↩️ Deshacer gasto', callback_data: `undo_${primaryId}` },
-                ],
-              ],
-            };
-
-        await sendTelegramMessage(chatId, reply, { replyMarkup });
+        // Interactive Keyboard with Payment methods, Category selector, and Undo
+        await sendTelegramMessage(chatId, reply, {
+          replyMarkup: getMainTransactionKeyboard(primaryId),
+        });
         break;
       }
 
@@ -540,6 +799,7 @@ export async function POST(req: NextRequest) {
         await sendTelegramMessage(
           chatId,
           `🤔 No entendí el formato. Probá por ejemplo:\n` +
+          `• 🎙 Mandar una nota de voz diciendo tu gasto\n` +
           `• \`3500 cafe\`\n` +
           `• \`3500 cafe efectivo\`\n` +
           `• \`60000 zapatillas 3 cuotas credito\`\n` +

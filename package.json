@@ -10,6 +10,7 @@
     "test:telegram": "tsx scripts/test-parser.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
     "canvas-confetti": "^1.9.4",
