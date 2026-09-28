@@ -68,8 +68,8 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
   const genAI = new GoogleGenerativeAI(apiKey);
   const base64Audio = audioBuffer.toString('base64');
 
-  // Candidate models: start with gemini-2.0-flash as primary, fallback to gemini-1.5-flash-latest
-  const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-2.5-flash'];
+  // Candidate models: use gemini-3.8-flash as primary
+  const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
   let responseText = '';
   let lastError: any = null;
 
