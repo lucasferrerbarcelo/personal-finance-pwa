@@ -71,6 +71,24 @@ CREATE INDEX IF NOT EXISTS idx_transactions_parent_id ON transactions(parent_tra
 CREATE INDEX IF NOT EXISTS idx_debts_status ON debts(status);
 CREATE INDEX IF NOT EXISTS idx_debt_payments_debt_id ON debt_payments(debt_id);
 
+-- Row Level Security (RLS) policies for personal finance app
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE debts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE debt_payments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all for categories" ON categories;
+CREATE POLICY "Allow all for categories" ON categories FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for transactions" ON transactions;
+CREATE POLICY "Allow all for transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for debts" ON debts;
+CREATE POLICY "Allow all for debts" ON debts FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for debt_payments" ON debt_payments;
+CREATE POLICY "Allow all for debt_payments" ON debt_payments FOR ALL USING (true) WITH CHECK (true);
+
 -- Default categories seed data
 INSERT INTO categories (name, type, icon, color) VALUES
   ('Supermercado', 'expense', 'ShoppingCart', '#10b981'),
