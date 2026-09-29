@@ -2,6 +2,8 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { Database, Category, Transaction, DebtSummary, DebtPayment, Debt, DebtType, Currency, TransactionType, PaymentMethod, Budget } from './types';
 import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, INITIAL_DEBTS } from '../mockData';
 import { calculateInstallmentDates, getCurrentDateISO } from '../utils';
+import { calculateInstallmentStatementCycles } from '../creditCards/calculator';
+import { getDefaultCreditCard } from '../creditCards/service';
 
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseUrl = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
@@ -87,6 +89,8 @@ export interface CreateTransactionParams {
   note: string | null;
   payment_method?: PaymentMethod;
   installments?: number; // total installments (1 = single payment)
+  card_id?: string | null;
+  statement_month?: string | null;
 }
 
 export async function createTransaction(params: CreateTransactionParams): Promise<Transaction[]> {
@@ -96,11 +100,28 @@ export async function createTransaction(params: CreateTransactionParams): Promis
   const parentId = installments > 1 ? `tx-${Date.now()}` : null;
   const paymentMethod: PaymentMethod = params.payment_method || 'transferencia';
 
+  let statementCycles: { statementMonth: string }[] = [];
+  let cardId: string | null = null;
+  if (paymentMethod === 'tarjeta_credito') {
+    const card = await getDefaultCreditCard(supabase);
+    cardId = params.card_id || card.id;
+    statementCycles = calculateInstallmentStatementCycles(
+      params.date,
+      installments,
+      card.closing_day,
+      card.due_day
+    );
+  }
+
   const newRecords: Transaction[] = [];
 
   for (let i = 0; i < installments; i++) {
     const noteSuffix = installments > 1 ? ` (Cuota ${i + 1}/${installments})` : '';
     const cleanNote = params.note ? `${params.note}${noteSuffix}` : (installments > 1 ? `Cuota ${i + 1}/${installments}` : '');
+    const stmtMonth = paymentMethod === 'tarjeta_credito' && statementCycles[i]
+      ? statementCycles[i].statementMonth
+      : (params.statement_month || null);
+    const stmtPaid = paymentMethod === 'tarjeta_credito' ? false : null;
 
     const record: Transaction = {
       id: installments > 1 && i === 0 ? parentId! : `tx-${Date.now()}-${i}`,
@@ -114,6 +135,9 @@ export async function createTransaction(params: CreateTransactionParams): Promis
       installment_current: installments > 1 ? i + 1 : null,
       installment_total: installments > 1 ? installments : null,
       parent_transaction_id: installments > 1 ? parentId : null,
+      statement_month: stmtMonth,
+      statement_paid: stmtPaid,
+      card_id: paymentMethod === 'tarjeta_credito' ? cardId : null,
       created_at: new Date().toISOString(),
     };
 
@@ -135,6 +159,9 @@ export async function createTransaction(params: CreateTransactionParams): Promis
           installment_current: r.installment_current,
           installment_total: r.installment_total,
           parent_transaction_id: r.parent_transaction_id,
+          statement_month: r.statement_month,
+          statement_paid: r.statement_paid,
+          card_id: r.card_id,
         }))
       )
       .select('*, category:categories(*)');
@@ -153,12 +180,26 @@ export async function updateTransaction(
   id: string,
   params: Partial<Omit<Transaction, 'id' | 'created_at'>>
 ): Promise<boolean> {
+  const updatedParams = { ...params };
+  if (updatedParams.payment_method === 'tarjeta_credito' && !updatedParams.statement_month) {
+    const card = await getDefaultCreditCard(supabase);
+    const dateToUse = updatedParams.date || getCurrentDateISO();
+    const cycle = calculateInstallmentStatementCycles(dateToUse, 1, card.closing_day, card.due_day)[0];
+    updatedParams.statement_month = cycle.statementMonth;
+    updatedParams.statement_paid = false;
+    updatedParams.card_id = updatedParams.card_id || card.id;
+  } else if (updatedParams.payment_method && updatedParams.payment_method !== 'tarjeta_credito') {
+    updatedParams.statement_month = null;
+    updatedParams.statement_paid = null;
+    updatedParams.card_id = null;
+  }
+
   if (supabase) {
-    const { error } = await supabase.from('transactions').update(params).eq('id', id);
+    const { error } = await supabase.from('transactions').update(updatedParams).eq('id', id);
     if (!error) return true;
   }
   const current = getLocalItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, INITIAL_TRANSACTIONS);
-  const updated = current.map(tx => (tx.id === id ? { ...tx, ...params } : tx));
+  const updated = current.map(tx => (tx.id === id ? { ...tx, ...updatedParams } : tx));
   setLocalItem(STORAGE_KEYS.TRANSACTIONS, updated);
   return true;
 }

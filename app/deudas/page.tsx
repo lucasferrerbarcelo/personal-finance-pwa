@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { DebtSummary, DebtType } from '@/lib/supabase/types';
-import { fetchDebts } from '@/lib/supabase/client';
+import { DebtSummary, DebtType, Transaction } from '@/lib/supabase/types';
+import { fetchDebts, fetchTransactions } from '@/lib/supabase/client';
 import { DebtCard } from '@/components/Deudas/DebtCard';
 import { DebtPaymentModal } from '@/components/Deudas/DebtPaymentModal';
 import { NewDebtModal } from '@/components/Deudas/NewDebtModal';
+import { CreditCardStatementCard } from '@/components/Dashboard/CreditCardStatementCard';
+import { useApp } from '@/components/Layout/AppShell';
 import { formatCurrency } from '@/lib/utils';
 import {
   HandCoins,
@@ -18,7 +20,9 @@ import {
 } from 'lucide-react';
 
 export default function DeudasPage() {
+  const { openCreditCardsModal } = useApp();
   const [debts, setDebts] = useState<DebtSummary[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DebtType>('owed'); // 'owed' = Me deben, 'owe' = Debo
   const [showSettled, setShowSettled] = useState(false);
@@ -30,10 +34,11 @@ export default function DeudasPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await fetchDebts();
-      setDebts(data);
+      const [dbs, txs] = await Promise.all([fetchDebts(), fetchTransactions()]);
+      setDebts(dbs);
+      setTransactions(txs);
     } catch (err) {
-      console.error('Error loading debts:', err);
+      console.error('Error loading debts & transactions:', err);
     } finally {
       setLoading(false);
     }
@@ -222,6 +227,15 @@ export default function DeudasPage() {
           <span>{showSettled ? 'Ocultar saldadas' : 'Ver saldadas'}</span>
         </button>
       </div>
+
+      {/* Credit Card Statement Card when viewing debts */}
+      {activeTab === 'owe' && (
+        <CreditCardStatementCard
+          transactions={transactions}
+          onRefresh={loadData}
+          onOpenSettings={openCreditCardsModal}
+        />
+      )}
 
       {/* Debts Grid */}
       {displayDebts.length === 0 ? (

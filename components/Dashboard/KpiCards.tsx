@@ -15,27 +15,32 @@ export function KpiCards({ transactions, debts, currentMonthStr }: KpiCardsProps
   // Filter transactions for this month
   const monthlyTransactions = transactions.filter(t => t.date.startsWith(currentMonthStr));
 
-  // ARS metrics
-  const expensesArs = monthlyTransactions
-    .filter(t => t.type === 'expense' && (t.currency || 'ARS') === 'ARS')
+  // ARS metrics:
+  // Liquid cash balance does NOT discount credit card expenses immediately
+  const cashExpensesArs = monthlyTransactions
+    .filter(t => t.type === 'expense' && (t.currency || 'ARS') === 'ARS' && t.payment_method !== 'tarjeta_credito')
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const creditCardExpensesArs = monthlyTransactions
+    .filter(t => t.type === 'expense' && (t.currency || 'ARS') === 'ARS' && t.payment_method === 'tarjeta_credito')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const incomeArs = monthlyTransactions
     .filter(t => t.type === 'income' && (t.currency || 'ARS') === 'ARS')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
-  const balanceArs = incomeArs - expensesArs;
+  const balanceArs = incomeArs - cashExpensesArs;
 
   // USD metrics
-  const expensesUsd = monthlyTransactions
-    .filter(t => t.type === 'expense' && t.currency === 'USD')
+  const cashExpensesUsd = monthlyTransactions
+    .filter(t => t.type === 'expense' && t.currency === 'USD' && t.payment_method !== 'tarjeta_credito')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const incomeUsd = monthlyTransactions
     .filter(t => t.type === 'income' && t.currency === 'USD')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
-  const balanceUsd = incomeUsd - expensesUsd;
+  const balanceUsd = incomeUsd - cashExpensesUsd;
 
   // Active debts summary
   const activeDebts = debts.filter(d => d.status === 'active');
@@ -71,8 +76,11 @@ export function KpiCards({ transactions, debts, currentMonthStr }: KpiCardsProps
             <span>▲ IN: {formatCurrency(incomeArs, 'ARS')}</span>
           </div>
 
-          <div className="bg-[#FB923C] border-2 border-black rounded-xl px-3.5 py-2 shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-black">
-            <span>▼ OUT: {formatCurrency(expensesArs, 'ARS')}</span>
+          <div
+            className="bg-[#FB923C] border-2 border-black rounded-xl px-3.5 py-2 shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-black"
+            title={creditCardExpensesArs > 0 ? `Gastos reales de caja. Tarjeta de crédito diferida: ${formatCurrency(creditCardExpensesArs, 'ARS')}` : undefined}
+          >
+            <span>▼ OUT (Caja): {formatCurrency(cashExpensesArs, 'ARS')}</span>
           </div>
         </div>
       </div>
@@ -99,7 +107,7 @@ export function KpiCards({ transactions, debts, currentMonthStr }: KpiCardsProps
           </div>
           <div className="flex items-center justify-between bg-[#FB923C]/40 border border-black rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-black">
             <span>OUT:</span>
-            <span>{formatCurrency(expensesUsd, 'USD')}</span>
+            <span>{formatCurrency(cashExpensesUsd, 'USD')}</span>
           </div>
         </div>
       </div>

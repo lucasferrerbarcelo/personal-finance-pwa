@@ -185,8 +185,8 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 7. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 3 cuotas zapatillas"
-  const cuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(.+?)\s+(\d+)\s*cuotas?(?:\s+(.+))?$/i;
+  // 7. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 zapatillas 3c", "60000 3c zapatillas"
+  const cuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(.+?)\s+(\d+)\s*(?:cuotas?|c)\b(?:\s+(.+))?$/i;
   const cuotasMatch = trimmed.match(cuotasRegex);
   if (cuotasMatch) {
     const rawAmount = cuotasMatch[1].replace(',', '.');
@@ -201,13 +201,13 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       currency: isUsd ? 'USD' : 'ARS',
       note: cleaned || 'Compra en cuotas',
       installments: installments > 0 ? installments : 1,
-      paymentMethod: method,
-      hasExplicitMethod,
+      paymentMethod: hasExplicitMethod ? method : (installments > 1 ? 'tarjeta_credito' : method),
+      hasExplicitMethod: hasExplicitMethod || installments > 1,
     };
   }
 
-  // Alt cuotas format: "60000 en 3 cuotas zapatillas credito" or "60000 3 cuotas zapatillas"
-  const altCuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:en\s+)?(\d+)\s*cuotas?\s*(?:de\s+|para\s+)?(.+)$/i;
+  // Alt cuotas format: "60000 en 3 cuotas zapatillas credito", "60000 en 3c zapatillas", "60000 3 cuotas zapatillas"
+  const altCuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:en\s+)?(\d+)\s*(?:cuotas?|c)\b\s*(?:de\s+|para\s+)?(.+)$/i;
   const altCuotasMatch = trimmed.match(altCuotasRegex);
   if (altCuotasMatch) {
     const rawAmount = altCuotasMatch[1].replace(',', '.');
@@ -222,8 +222,8 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
       currency: isUsd ? 'USD' : 'ARS',
       note: cleaned || 'Compra en cuotas',
       installments: installments > 0 ? installments : 1,
-      paymentMethod: method,
-      hasExplicitMethod,
+      paymentMethod: hasExplicitMethod ? method : (installments > 1 ? 'tarjeta_credito' : method),
+      hasExplicitMethod: hasExplicitMethod || installments > 1,
     };
   }
 

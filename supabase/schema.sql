@@ -124,3 +124,28 @@ ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for budgets" ON budgets;
 CREATE POLICY "Allow all for budgets" ON budgets FOR ALL USING (true) WITH CHECK (true);
 
+-- 7. Credit Cards Configuration
+CREATE TABLE IF NOT EXISTS credit_cards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  closing_day INTEGER NOT NULL CHECK (closing_day BETWEEN 1 AND 31),
+  due_day INTEGER NOT NULL CHECK (due_day BETWEEN 1 AND 31),
+  is_default BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for credit_cards" ON credit_cards;
+CREATE POLICY "Allow all for credit_cards" ON credit_cards FOR ALL USING (true) WITH CHECK (true);
+
+-- Seed default card if table is empty
+INSERT INTO credit_cards (name, closing_day, due_day, is_default)
+SELECT 'Visa Galicia', 24, 5, true
+WHERE NOT EXISTS (SELECT 1 FROM credit_cards);
+
+-- Migrations for transactions table: credit card statement cycle
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS statement_month TEXT; -- 'YYYY-MM'
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS statement_paid BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_id UUID REFERENCES credit_cards(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_transactions_statement_month ON transactions(statement_month);
+

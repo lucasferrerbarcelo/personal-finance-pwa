@@ -11,6 +11,7 @@ import {
   PlusCircle,
   Database,
   Sparkles,
+  CreditCard,
 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 
@@ -43,9 +44,10 @@ const NAV_ITEMS = [
 
 interface DesktopSidebarProps {
   onOpenNewTxModal?: () => void;
+  onOpenCreditCardsModal?: () => void;
 }
 
-export function DesktopSidebar({ onOpenNewTxModal }: DesktopSidebarProps) {
+export function DesktopSidebar({ onOpenNewTxModal, onOpenCreditCardsModal }: DesktopSidebarProps) {
   const pathname = usePathname();
   const hasSupabase = isSupabaseConfigured();
 
@@ -102,6 +104,20 @@ export function DesktopSidebar({ onOpenNewTxModal }: DesktopSidebarProps) {
             </Link>
           );
         })}
+
+        {/* Tarjetas de Crédito Configuration */}
+        {onOpenCreditCardsModal && (
+          <button
+            onClick={onOpenCreditCardsModal}
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-zinc-700 hover:text-black hover:bg-[#FB923C]/20 border-2 border-transparent font-bold text-left mt-2"
+          >
+            <CreditCard className="w-5 h-5 stroke-[2px] text-amber-700" />
+            <div>
+              <p className="text-sm tracking-tight leading-none font-bold">Tarjetas</p>
+              <p className="text-[10px] opacity-70 mt-1">Cierre y vencimiento</p>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Status Footer */}

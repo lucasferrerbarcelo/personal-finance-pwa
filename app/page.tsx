@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Transaction, DebtSummary } from '@/lib/supabase/types';
 import { fetchTransactions, fetchDebts } from '@/lib/supabase/client';
 import { KpiCards } from '@/components/Dashboard/KpiCards';
+import { CreditCardStatementCard } from '@/components/Dashboard/CreditCardStatementCard';
 import { MonthlyBudgetCard } from '@/components/Dashboard/MonthlyBudgetCard';
 import { CategoryDonutChart } from '@/components/Dashboard/CategoryDonutChart';
 import { PaymentMethodBreakdown } from '@/components/Dashboard/PaymentMethodBreakdown';
@@ -14,7 +15,7 @@ import { getCurrentDateISO, formatMonthYear } from '@/lib/utils';
 import { PlusCircle, RefreshCw } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { openNewTxModal, openEditTxModal, refreshTrigger, triggerRefresh } = useApp();
+  const { openNewTxModal, openEditTxModal, openCreditCardsModal, refreshTrigger, triggerRefresh } = useApp();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [debts, setDebts] = useState<DebtSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +81,13 @@ export default function DashboardPage() {
         transactions={transactions}
         debts={debts}
         currentMonthStr={currentMonthStr}
+      />
+
+      {/* Credit Card Statement Card (Liquidación de Tarjeta de Crédito) */}
+      <CreditCardStatementCard
+        transactions={transactions}
+        onRefresh={triggerRefresh}
+        onOpenSettings={openCreditCardsModal}
       />
 
       {/* Monthly Budget Card */}

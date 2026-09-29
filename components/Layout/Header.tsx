@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Send, Info } from 'lucide-react';
+import { Plus, Send, Info, CreditCard } from 'lucide-react';
 import { Modal } from '../UI/Modal';
 
 interface HeaderProps {
   onOpenNewTxModal?: () => void;
+  onOpenCreditCardsModal?: () => void;
 }
 
 export function BauhausLogo({ className = 'w-8 h-8' }: { className?: string }) {
@@ -16,7 +17,7 @@ export function BauhausLogo({ className = 'w-8 h-8' }: { className?: string }) {
   );
 }
 
-export function Header({ onOpenNewTxModal }: HeaderProps) {
+export function Header({ onOpenNewTxModal, onOpenCreditCardsModal }: HeaderProps) {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
 
   const todayStr = new Intl.DateTimeFormat('es-AR', {
@@ -44,6 +45,18 @@ export function Header({ onOpenNewTxModal }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Credit Cards button */}
+          {onOpenCreditCardsModal && (
+            <button
+              onClick={onOpenCreditCardsModal}
+              className="flex items-center gap-1.5 text-xs text-black bg-[#FB923C] border-2 border-black px-2.5 py-1.5 rounded-xl shadow-[2px_2px_0px_0px_#000] font-bold transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-[0px_0px_0px_0px_#000]"
+              title="Configuración de Tarjetas de Crédito"
+            >
+              <CreditCard className="w-3.5 h-3.5 stroke-[2.5px]" />
+              <span className="hidden sm:inline">Tarjetas</span>
+            </button>
+          )}
+
           {/* Telegram info button */}
           <button
             onClick={() => setIsTelegramModalOpen(true)}

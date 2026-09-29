@@ -13,6 +13,15 @@ export interface Category {
   created_at?: string;
 }
 
+export interface CreditCard {
+  id: string;
+  name: string;
+  closing_day: number;
+  due_day: number;
+  is_default?: boolean;
+  created_at?: string;
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;
@@ -25,6 +34,9 @@ export interface Transaction {
   installment_current: number | null;
   installment_total: number | null;
   parent_transaction_id: string | null;
+  statement_month?: string | null; // 'YYYY-MM'
+  statement_paid?: boolean | null;
+  card_id?: string | null;
   created_at: string;
   category?: Category | null;
 }
@@ -94,6 +106,12 @@ export interface Database {
         Row: Budget;
         Insert: Omit<Budget, 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Omit<Budget, 'id'>>;
+        Relationships: [];
+      };
+      credit_cards: {
+        Row: CreditCard;
+        Insert: Omit<CreditCard, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<CreditCard, 'id'>>;
         Relationships: [];
       };
     };

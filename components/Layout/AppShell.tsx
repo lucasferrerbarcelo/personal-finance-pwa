@@ -5,11 +5,13 @@ import { BottomNav } from './BottomNav';
 import { DesktopSidebar } from './DesktopSidebar';
 import { Header } from './Header';
 import { TransactionModal } from '../Movimientos/TransactionModal';
+import { CreditCardsModal } from '../CreditCards/CreditCardsModal';
 import { Transaction } from '@/lib/supabase/types';
 
 interface AppContextType {
   openNewTxModal: () => void;
   openEditTxModal: (tx: Transaction) => void;
+  openCreditCardsModal: () => void;
   refreshTrigger: number;
   triggerRefresh: () => void;
 }
@@ -17,6 +19,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType>({
   openNewTxModal: () => {},
   openEditTxModal: () => {},
+  openCreditCardsModal: () => {},
   refreshTrigger: 0,
   triggerRefresh: () => {},
 });
@@ -25,6 +28,7 @@ export const useApp = () => useContext(AppContext);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [isCreditCardsModalOpen, setIsCreditCardsModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -40,22 +44,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setIsTxModalOpen(true);
   };
 
+  const openCreditCardsModal = () => {
+    setIsCreditCardsModalOpen(true);
+  };
+
   return (
     <AppContext.Provider
       value={{
         openNewTxModal,
         openEditTxModal,
+        openCreditCardsModal,
         refreshTrigger,
         triggerRefresh,
       }}
     >
       <div className="min-h-screen bg-[#F4F1EA] text-black flex flex-col md:flex-row antialiased selection:bg-[#FACC15] selection:text-black">
         {/* Desktop Sidebar */}
-        <DesktopSidebar onOpenNewTxModal={openNewTxModal} />
+        <DesktopSidebar onOpenNewTxModal={openNewTxModal} onOpenCreditCardsModal={openCreditCardsModal} />
 
         {/* Main Content Area */}
         <div className="flex-1 md:pl-64 flex flex-col min-w-0">
-          <Header onOpenNewTxModal={openNewTxModal} />
+          <Header onOpenNewTxModal={openNewTxModal} onOpenCreditCardsModal={openCreditCardsModal} />
 
           <main className="flex-1 p-4 md:p-8 max-w-6xl w-full mx-auto pb-24 md:pb-12">
             {children}
@@ -76,6 +85,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             triggerRefresh();
           }}
           transactionToEdit={editingTx}
+        />
+
+        {/* Global Credit Cards Config Modal */}
+        <CreditCardsModal
+          isOpen={isCreditCardsModalOpen}
+          onClose={() => setIsCreditCardsModalOpen(false)}
+          onCardsUpdated={() => triggerRefresh()}
         />
       </div>
     </AppContext.Provider>

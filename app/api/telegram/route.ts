@@ -15,6 +15,12 @@ import { findBestCategory } from '@/lib/categories/matcher';
 import { processVoiceNoteWithGemini } from '@/lib/gemini/voice';
 import { processReceiptImageWithGemini } from '@/lib/gemini/receipt';
 import { getMonthlyBudget, getMonthlySpent, setMonthlyBudget } from '@/lib/budgets/service';
+import {
+  calculateStatementCycle,
+  calculateInstallmentStatementCycles,
+  StatementCycleInfo,
+} from '@/lib/creditCards/calculator';
+import { getDefaultCreditCard } from '@/lib/creditCards/service';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,8 +95,49 @@ function formatExpenseMessage(params: {
   perInstallment?: number;
   dates?: string[];
   isReceipt?: boolean;
+  creditCycle?: StatementCycleInfo;
+  installmentCycles?: StatementCycleInfo[];
 }) {
-  const { amount, currency, concept, categoryName, methodLabel, installments, perInstallment, dates, isReceipt } = params;
+  const {
+    amount,
+    currency,
+    concept,
+    categoryName,
+    methodLabel,
+    installments,
+    perInstallment,
+    dates,
+    isReceipt,
+    creditCycle,
+    installmentCycles,
+  } = params;
+
+  if (creditCycle) {
+    if (installments && installments > 1 && perInstallment) {
+      const lastCycle = installmentCycles && installmentCycles.length > 0
+        ? installmentCycles[installmentCycles.length - 1]
+        : null;
+
+      return (
+        `💳 *Gasto en Crédito registrado:* ${formatCurrency(amount, currency)} (${installments} cuotas de ${formatCurrency(perInstallment, currency)})\n\n` +
+        `📝 *Concepto:* ${concept}\n` +
+        `📂 *Categoría:* ${categoryName}\n` +
+        `📅 *Entra en el resumen a pagar en:* ${creditCycle.statementMonthName} (Día ${creditCycle.dueDay})\n` +
+        `🏷 *Cierre del resumen:* día ${creditCycle.closingDay} (${creditCycle.closingDisplay})` +
+        (lastCycle && lastCycle.statementMonth !== creditCycle.statementMonth
+          ? `\n📅 *Última cuota a pagar en:* ${lastCycle.statementMonthName} (Día ${lastCycle.dueDay})`
+          : '')
+      );
+    }
+
+    return (
+      `💳 *Gasto en Crédito registrado:* ${formatCurrency(amount, currency)}\n\n` +
+      `📝 *Concepto:* ${concept}\n` +
+      `📂 *Categoría:* ${categoryName}\n` +
+      `📅 *Entra en el resumen a pagar en:* ${creditCycle.statementMonthName} (Día ${creditCycle.dueDay})\n` +
+      `🏷 *Cierre del resumen:* día ${creditCycle.closingDay} (${creditCycle.closingDisplay})`
+    );
+  }
 
   if (installments && installments > 1 && perInstallment && dates) {
     return (
@@ -171,6 +218,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const update = await req.json();
+    const today = getCurrentDateISO();
 
     // -------------------------------------------------------------
     // 1. Handle Callback Queries (Interactive Inline Buttons)
@@ -340,18 +388,80 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ ok: true });
         }
 
-        // Update transaction and any related installment rows
-        await supabase.from('transactions').update({ payment_method: newMethod } as any).eq('id', txId);
-        if (tx.parent_transaction_id) {
-          await supabase
-            .from('transactions')
-            .update({ payment_method: newMethod } as any)
-            .eq('parent_transaction_id', tx.parent_transaction_id);
+        let creditCycle: StatementCycleInfo | undefined;
+        let installmentCycles: StatementCycleInfo[] | undefined;
+
+        if (newMethod === 'tarjeta_credito') {
+          const card = await getDefaultCreditCard(supabase);
+          const totalInst = tx.installment_total || 1;
+          const txDate = tx.date || today;
+
+          installmentCycles = calculateInstallmentStatementCycles(
+            txDate,
+            totalInst,
+            card.closing_day,
+            card.due_day
+          );
+          creditCycle = installmentCycles[0];
+
+          await supabase.from('transactions').update({
+            payment_method: newMethod,
+            statement_month: creditCycle.statementMonth,
+            statement_paid: false,
+            card_id: card.id,
+          } as any).eq('id', txId);
+
+          if (tx.parent_transaction_id || tx.installment_total) {
+            const parentId = tx.parent_transaction_id || txId;
+            const { data: siblings } = await supabase
+              .from('transactions')
+              .select('id, installment_current')
+              .or(`id.eq.${parentId},parent_transaction_id.eq.${parentId}`)
+              .order('installment_current', { ascending: true });
+
+            if (siblings && siblings.length > 0) {
+              for (const sib of siblings) {
+                const idx = Math.max(0, (sib.installment_current || 1) - 1);
+                const sibCycle = installmentCycles[idx] || creditCycle;
+                await supabase.from('transactions').update({
+                  payment_method: newMethod,
+                  statement_month: sibCycle.statementMonth,
+                  statement_paid: false,
+                  card_id: card.id,
+                } as any).eq('id', sib.id);
+              }
+            }
+          }
         } else {
-          await supabase
-            .from('transactions')
-            .update({ payment_method: newMethod } as any)
-            .eq('parent_transaction_id', txId);
+          // Reset credit card fields
+          await supabase.from('transactions').update({
+            payment_method: newMethod,
+            statement_month: null,
+            statement_paid: null,
+            card_id: null,
+          } as any).eq('id', txId);
+
+          if (tx.parent_transaction_id) {
+            await supabase
+              .from('transactions')
+              .update({
+                payment_method: newMethod,
+                statement_month: null,
+                statement_paid: null,
+                card_id: null,
+              } as any)
+              .eq('parent_transaction_id', tx.parent_transaction_id);
+          } else {
+            await supabase
+              .from('transactions')
+              .update({
+                payment_method: newMethod,
+                statement_month: null,
+                statement_paid: null,
+                card_id: null,
+              } as any)
+              .eq('parent_transaction_id', txId);
+          }
         }
 
         const methodLabel = PAYMENT_METHOD_LABELS[newMethod] || newMethod;
@@ -361,13 +471,21 @@ export async function POST(req: NextRequest) {
 
         if (chatId && messageId) {
           const isReceipt = (cb.message?.text || '').includes('Ticket procesado');
+          const totalAmount = tx.installment_total && tx.installment_total > 1
+            ? Number(tx.amount) * tx.installment_total
+            : Number(tx.amount);
+
           const updatedText = formatExpenseMessage({
-            amount: Number(tx.amount),
+            amount: totalAmount,
             currency: tx.currency,
             concept: tx.note || 'Gasto',
             categoryName: catName,
             methodLabel,
+            installments: tx.installment_total || 1,
+            perInstallment: Number(tx.amount),
             isReceipt,
+            creditCycle,
+            installmentCycles,
           });
 
           await editTelegramMessageText(chatId, messageId, updatedText, {
@@ -405,7 +523,6 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getServiceSupabase();
-    const today = getCurrentDateISO();
 
     // Fetch existing categories from Supabase (or fallback)
     let categoriesList: Array<{ id: string; name: string }> = INITIAL_CATEGORIES.filter(c => c.type === 'expense');
@@ -491,10 +608,31 @@ export async function POST(req: NextRequest) {
         const singleTxId = crypto.randomUUID();
         const primaryId = installments > 1 ? parentId : singleTxId;
 
+        let creditCycle: StatementCycleInfo | undefined;
+        let installmentCycles: StatementCycleInfo[] | undefined;
+        let cardId: string | null = null;
+
+        if (payment_method === 'tarjeta_credito') {
+          const card = await getDefaultCreditCard(supabase);
+          cardId = card.id;
+          installmentCycles = calculateInstallmentStatementCycles(
+            today,
+            installments,
+            card.closing_day,
+            card.due_day
+          );
+          creditCycle = installmentCycles[0];
+        }
+
         if (supabase) {
           const recordsToInsert = [];
           for (let i = 0; i < installments; i++) {
             const installmentNote = installments > 1 ? `${concept} (Cuota ${i + 1}/${installments})` : concept;
+            const stmtMonth = payment_method === 'tarjeta_credito' && installmentCycles?.[i]
+              ? installmentCycles[i].statementMonth
+              : null;
+            const stmtPaid = payment_method === 'tarjeta_credito' ? false : null;
+
             recordsToInsert.push({
               id: installments > 1 ? (i === 0 ? parentId : crypto.randomUUID()) : singleTxId,
               type: 'expense' as const,
@@ -507,6 +645,9 @@ export async function POST(req: NextRequest) {
               installment_current: installments > 1 ? i + 1 : null,
               installment_total: installments > 1 ? installments : null,
               parent_transaction_id: installments > 1 ? parentId : null,
+              statement_month: stmtMonth,
+              statement_paid: stmtPaid,
+              card_id: payment_method === 'tarjeta_credito' ? cardId : null,
             });
           }
 
@@ -532,6 +673,8 @@ export async function POST(req: NextRequest) {
           installments,
           perInstallment,
           dates,
+          creditCycle,
+          installmentCycles,
         }) + budgetFooter;
 
         await sendTelegramMessage(chatId, reply, {
@@ -625,6 +768,14 @@ export async function POST(req: NextRequest) {
         const { amount, currency, concept, payment_method, category_id, category_name } = parsedReceipt;
         const txId = crypto.randomUUID();
 
+        let creditCycle: StatementCycleInfo | undefined;
+        let cardId: string | null = null;
+        if (payment_method === 'tarjeta_credito') {
+          const card = await getDefaultCreditCard(supabase);
+          cardId = card.id;
+          creditCycle = calculateStatementCycle(today, card.closing_day, card.due_day);
+        }
+
         if (supabase) {
           const { error: insErr } = await supabase.from('transactions').insert({
             id: txId,
@@ -635,6 +786,9 @@ export async function POST(req: NextRequest) {
             date: today,
             note: concept,
             payment_method,
+            statement_month: creditCycle ? creditCycle.statementMonth : null,
+            statement_paid: creditCycle ? false : null,
+            card_id: creditCycle ? cardId : null,
           } as any);
 
           if (insErr) {
@@ -656,6 +810,7 @@ export async function POST(req: NextRequest) {
           categoryName: catName,
           methodLabel,
           isReceipt: true,
+          creditCycle,
         }) + budgetFooter;
 
         await sendTelegramMessage(chatId, reply, {
@@ -720,10 +875,31 @@ export async function POST(req: NextRequest) {
         const singleTxId = crypto.randomUUID();
         const primaryId = installments > 1 ? parentId : singleTxId;
 
+        let creditCycle: StatementCycleInfo | undefined;
+        let installmentCycles: StatementCycleInfo[] | undefined;
+        let cardId: string | null = null;
+
+        if (paymentMethod === 'tarjeta_credito') {
+          const card = await getDefaultCreditCard(supabase);
+          cardId = card.id;
+          installmentCycles = calculateInstallmentStatementCycles(
+            today,
+            installments,
+            card.closing_day,
+            card.due_day
+          );
+          creditCycle = installmentCycles[0];
+        }
+
         if (supabase) {
           const recordsToInsert = [];
           for (let i = 0; i < installments; i++) {
             const installmentNote = installments > 1 ? `${note} (Cuota ${i + 1}/${installments})` : note;
+            const stmtMonth = paymentMethod === 'tarjeta_credito' && installmentCycles?.[i]
+              ? installmentCycles[i].statementMonth
+              : null;
+            const stmtPaid = paymentMethod === 'tarjeta_credito' ? false : null;
+
             recordsToInsert.push({
               id: installments > 1 ? (i === 0 ? parentId : crypto.randomUUID()) : singleTxId,
               type: 'expense' as const,
@@ -736,6 +912,9 @@ export async function POST(req: NextRequest) {
               installment_current: installments > 1 ? i + 1 : null,
               installment_total: installments > 1 ? installments : null,
               parent_transaction_id: installments > 1 ? parentId : null,
+              statement_month: stmtMonth,
+              statement_paid: stmtPaid,
+              card_id: paymentMethod === 'tarjeta_credito' ? cardId : null,
             });
           }
 
@@ -759,6 +938,8 @@ export async function POST(req: NextRequest) {
           installments,
           perInstallment,
           dates,
+          creditCycle,
+          installmentCycles,
         }) + budgetFooter;
 
         // Interactive Keyboard with Payment methods, Category selector, and Undo
