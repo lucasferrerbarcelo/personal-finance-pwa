@@ -13,10 +13,10 @@ export function CurrencyBadge({ currency, className = '' }: CurrencyBadgeProps) 
 
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold tracking-wide ${
+      className={`inline-flex items-center px-1.5 py-0.2 rounded font-mono font-bold text-[10px] tracking-wide border border-black shadow-[1px_1px_0px_0px_#000] ${
         isUsd
-          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-          : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+          ? 'bg-[#86EFAC] text-black'
+          : 'bg-[#60A5FA] text-black'
       } ${className}`}
     >
       {isUsd ? 'U$S' : 'ARS'}

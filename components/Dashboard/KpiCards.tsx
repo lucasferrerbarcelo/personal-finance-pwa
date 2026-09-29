@@ -3,7 +3,7 @@
 import React from 'react';
 import { Transaction, DebtSummary } from '@/lib/supabase/types';
 import { formatCurrency } from '@/lib/utils';
-import { TrendingDown, TrendingUp, Wallet, HandCoins } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, HandCoins } from 'lucide-react';
 
 interface KpiCardsProps {
   transactions: Transaction[];
@@ -17,12 +17,14 @@ export function KpiCards({ transactions, debts, currentMonthStr }: KpiCardsProps
 
   // ARS metrics
   const expensesArs = monthlyTransactions
-    .filter(t => t.type === 'expense' && t.currency === 'ARS')
+    .filter(t => t.type === 'expense' && (t.currency || 'ARS') === 'ARS')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const incomeArs = monthlyTransactions
-    .filter(t => t.type === 'income' && t.currency === 'ARS')
+    .filter(t => t.type === 'income' && (t.currency || 'ARS') === 'ARS')
     .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const balanceArs = incomeArs - expensesArs;
 
   // USD metrics
   const expensesUsd = monthlyTransactions
@@ -33,101 +35,106 @@ export function KpiCards({ transactions, debts, currentMonthStr }: KpiCardsProps
     .filter(t => t.type === 'income' && t.currency === 'USD')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
+  const balanceUsd = incomeUsd - expensesUsd;
+
   // Active debts summary
   const activeDebts = debts.filter(d => d.status === 'active');
   const owedToMeArs = activeDebts
-    .filter(d => d.type === 'owed' && d.currency === 'ARS')
+    .filter(d => d.type === 'owed' && (d.currency || 'ARS') === 'ARS')
     .reduce((sum, d) => sum + Number(d.remaining_amount), 0);
   const iOweArs = activeDebts
-    .filter(d => d.type === 'owe' && d.currency === 'ARS')
+    .filter(d => d.type === 'owe' && (d.currency || 'ARS') === 'ARS')
     .reduce((sum, d) => sum + Number(d.remaining_amount), 0);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-      {/* 1. Total Gastos Mes ARS */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#121216] border border-white/10 p-4 shadow-lg hover:border-rose-500/30 transition-all">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400">Gastos Mes (ARS)</span>
-          <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400">
-            <TrendingDown className="w-4 h-4" />
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      {/* 1. Tarjeta Principal de Balance (Hero Card) */}
+      <div className="lg:col-span-6 xl:col-span-6 bg-[#FACC15] border-2 border-black rounded-2xl shadow-[4px_4px_0px_0px_#000] p-6 text-black flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="inline-block px-2.5 py-0.5 bg-black text-[#FACC15] font-mono text-[11px] font-black tracking-wider uppercase rounded-md border border-black shadow-[1px_1px_0px_0px_#000]">
+              [BALANCE DISPONIBLE]
+            </span>
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-black/80">
+              PESOS ARS
+            </span>
+          </div>
+
+          <div className="text-4xl sm:text-5xl font-black font-mono tabular-nums tracking-tight text-black mt-3 mb-4">
+            {formatCurrency(balanceArs, 'ARS')}
           </div>
         </div>
-        <div className="mt-3">
-          <h3 className="text-2xl font-black tracking-tight text-white">
-            {formatCurrency(expensesArs, 'ARS')}
-          </h3>
-          <p className="text-[11px] text-zinc-400 mt-1 flex items-center gap-1">
-            <span>Ingresos:</span>
-            <span className="text-emerald-400 font-medium">{formatCurrency(incomeArs, 'ARS')}</span>
-          </p>
+
+        {/* Dos píldoras integradas abajo */}
+        <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t-2 border-black/20">
+          <div className="bg-[#86EFAC] border-2 border-black rounded-xl px-3.5 py-2 shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-black">
+            <span>▲ IN: {formatCurrency(incomeArs, 'ARS')}</span>
+          </div>
+
+          <div className="bg-[#FB923C] border-2 border-black rounded-xl px-3.5 py-2 shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-black">
+            <span>▼ OUT: {formatCurrency(expensesArs, 'ARS')}</span>
+          </div>
         </div>
-        <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-rose-500/5 blur-2xl pointer-events-none" />
       </div>
 
-      {/* 2. Total Gastos Mes USD */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#121216] border border-white/10 p-4 shadow-lg hover:border-emerald-500/30 transition-all">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400">Gastos Mes (USD)</span>
-          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-            <TrendingDown className="w-4 h-4" />
+      {/* 2. Balance USD Card */}
+      <div className="lg:col-span-3 bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_0px_#000] p-5 text-black flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black">
+              [BALANCE USD]
+            </span>
+            <span className="text-xs font-mono font-bold text-zinc-600">DÓLARES</span>
+          </div>
+
+          <div className="text-3xl font-black font-mono tabular-nums tracking-tight text-black mt-3 mb-3">
+            {formatCurrency(balanceUsd, 'USD')}
           </div>
         </div>
-        <div className="mt-3">
-          <h3 className="text-2xl font-black tracking-tight text-emerald-400">
-            {formatCurrency(expensesUsd, 'USD')}
-          </h3>
-          <p className="text-[11px] text-zinc-400 mt-1 flex items-center gap-1">
-            <span>Ingresos:</span>
-            <span className="text-emerald-300 font-medium">{formatCurrency(incomeUsd, 'USD')}</span>
-          </p>
+
+        <div className="space-y-1.5 pt-2 border-t-2 border-black/10">
+          <div className="flex items-center justify-between bg-[#86EFAC]/40 border border-black rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-black">
+            <span>IN:</span>
+            <span>{formatCurrency(incomeUsd, 'USD')}</span>
+          </div>
+          <div className="flex items-center justify-between bg-[#FB923C]/40 border border-black rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-black">
+            <span>OUT:</span>
+            <span>{formatCurrency(expensesUsd, 'USD')}</span>
+          </div>
         </div>
-        <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-emerald-500/5 blur-2xl pointer-events-none" />
       </div>
 
-      {/* 3. Balance Neto ARS */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#121216] border border-white/10 p-4 shadow-lg hover:border-sky-500/30 transition-all">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400">Balance Neto Mes</span>
-          <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
-            <Wallet className="w-4 h-4" />
+      {/* 3. Deudas & Préstamos Card */}
+      <div className="lg:col-span-3 bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_0px_#000] p-5 text-black flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black">
+              [DEUDAS]
+            </span>
+            <span className="text-[11px] font-bold text-zinc-500 font-mono">
+              {activeDebts.length} activas
+            </span>
           </div>
-        </div>
-        <div className="mt-3">
-          <h3
-            className={`text-2xl font-black tracking-tight ${
-              incomeArs - expensesArs >= 0 ? 'text-white' : 'text-rose-400'
-            }`}
-          >
-            {formatCurrency(incomeArs - expensesArs, 'ARS')}
-          </h3>
-          <p className="text-[11px] text-zinc-400 mt-1">
-            {incomeArs >= expensesArs ? '✅ Flujo positivo este mes' : '⚠️ Gastos superan ingresos'}
-          </p>
-        </div>
-        <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-sky-500/5 blur-2xl pointer-events-none" />
-      </div>
 
-      {/* 4. Deudas Activas */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#121216] border border-white/10 p-4 shadow-lg hover:border-amber-500/30 transition-all">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400">Deudas & Préstamos</span>
-          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-            <HandCoins className="w-4 h-4" />
+          <div className="space-y-2 mt-3 mb-2">
+            <div className="bg-[#86EFAC] border-2 border-black rounded-xl p-2 shadow-[2px_2px_0px_0px_#000]">
+              <div className="text-[10px] font-mono font-bold uppercase text-black/70">Me deben:</div>
+              <div className="text-base font-black font-mono tabular-nums text-black">
+                {formatCurrency(owedToMeArs, 'ARS')}
+              </div>
+            </div>
+
+            <div className="bg-[#FB923C] border-2 border-black rounded-xl p-2 shadow-[2px_2px_0px_0px_#000]">
+              <div className="text-[10px] font-mono font-bold uppercase text-black/70">Debo:</div>
+              <div className="text-base font-black font-mono tabular-nums text-black">
+                {formatCurrency(iOweArs, 'ARS')}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="mt-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-400">Me deben:</span>
-            <span className="font-bold text-emerald-400">{formatCurrency(owedToMeArs, 'ARS')}</span>
-          </div>
-          <div className="flex items-center justify-between text-xs mt-1.5">
-            <span className="text-zinc-400">Debo:</span>
-            <span className="font-bold text-rose-400">{formatCurrency(iOweArs, 'ARS')}</span>
-          </div>
-          <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
-            <span className="text-zinc-400">Activas:</span>
-            <span className="text-zinc-300 font-semibold">{activeDebts.length} registradas</span>
-          </div>
+
+        <div className="text-[11px] font-bold text-zinc-600 pt-1 text-center font-mono">
+          Neto pendiente: {formatCurrency(owedToMeArs - iOweArs, 'ARS')}
         </div>
       </div>
     </div>

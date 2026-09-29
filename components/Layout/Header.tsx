@@ -8,6 +8,14 @@ interface HeaderProps {
   onOpenNewTxModal?: () => void;
 }
 
+export function BauhausLogo({ className = 'w-8 h-8' }: { className?: string }) {
+  return (
+    <div className={`relative ${className} bg-[#FACC15] border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_#000] flex items-center justify-center shrink-0`}>
+      <div className="w-3.5 h-3.5 rounded-full bg-black" />
+    </div>
+  );
+}
+
 export function Header({ onOpenNewTxModal }: HeaderProps) {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
 
@@ -21,29 +29,28 @@ export function Header({ onOpenNewTxModal }: HeaderProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 glass border-b border-white/10 px-4 md:px-8 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-[#F4F1EA] border-b-2 border-black px-4 md:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="md:hidden w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-black font-black text-sm">
-            $
+          <div className="flex items-center gap-2.5">
+            <BauhausLogo className="w-8 h-8" />
+            <span className="text-lg md:text-xl font-black tracking-tight text-black">
+              FINANZAS
+            </span>
           </div>
-          <div>
-            <h1 className="text-sm md:text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-              <span>Mi Economía</span>
-              <span className="text-[10px] text-zinc-400 font-normal px-2 py-0.5 rounded-full bg-white/5 border border-white/5">
-                {capitalizedDate}
-              </span>
-            </h1>
-          </div>
+
+          <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md bg-white border-2 border-black text-[11px] font-mono font-bold text-black shadow-[1px_1px_0px_0px_#000]">
+            [{capitalizedDate.toUpperCase()}]
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Telegram info button */}
           <button
             onClick={() => setIsTelegramModalOpen(true)}
-            className="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 px-2.5 py-1.5 rounded-xl transition-all"
+            className="flex items-center gap-1.5 text-xs text-black bg-[#60A5FA] border-2 border-black px-2.5 py-1.5 rounded-xl shadow-[2px_2px_0px_0px_#000] font-bold transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-[0px_0px_0px_0px_#000]"
             title="Integración Telegram Bot"
           >
-            <Send className="w-3.5 h-3.5" />
+            <Send className="w-3.5 h-3.5 stroke-[2.5px]" />
             <span className="hidden sm:inline">Bot Telegram</span>
           </button>
 
@@ -51,10 +58,10 @@ export function Header({ onOpenNewTxModal }: HeaderProps) {
           {onOpenNewTxModal && (
             <button
               onClick={onOpenNewTxModal}
-              className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs py-1.5 px-3 rounded-xl transition-transform active:scale-95 shadow-md shadow-emerald-500/20"
+              className="flex items-center gap-1.5 bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black text-xs py-1.5 px-3.5 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000]"
             >
-              <Plus className="w-4 h-4 stroke-[2.5px]" />
-              <span className="inline">Movimiento</span>
+              <Plus className="w-4 h-4 stroke-[3px]" />
+              <span>Nuevo</span>
             </button>
           )}
         </div>

@@ -136,20 +136,20 @@ export function TransactionModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="p-3 text-xs bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl">
+          <div className="p-3 text-xs bg-[#FB923C]/20 border-2 border-black text-black font-bold rounded-xl shadow-[2px_2px_0px_0px_#000]">
             {error}
           </div>
         )}
 
         {/* Type Toggle: Gasto vs Ingreso */}
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-white/5 rounded-xl border border-white/5">
+        <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#F4F1EA] rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_#000]">
           <button
             type="button"
             onClick={() => setType('expense')}
-            className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+            className={`py-2 text-xs font-black rounded-lg transition-all border-2 ${
               type === 'expense'
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-[#FB923C] text-black border-black shadow-[2px_2px_0px_0px_#000]'
+                : 'bg-white text-black border-transparent hover:border-black/30'
             }`}
           >
             💸 Gasto
@@ -157,10 +157,10 @@ export function TransactionModal({
           <button
             type="button"
             onClick={() => setType('income')}
-            className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+            className={`py-2 text-xs font-black rounded-lg transition-all border-2 ${
               type === 'income'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-[#86EFAC] text-black border-black shadow-[2px_2px_0px_0px_#000]'
+                : 'bg-white text-black border-transparent hover:border-black/30'
             }`}
           >
             💰 Ingreso
@@ -169,17 +169,19 @@ export function TransactionModal({
 
         {/* Amount & Currency Selector */}
         <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">Monto y Moneda</label>
-          <div className="flex rounded-xl bg-white/5 border border-white/10 overflow-hidden focus-within:border-emerald-500/50 transition-colors">
+          <label className="block text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5">
+            Monto y Moneda
+          </label>
+          <div className="flex rounded-xl bg-white border-2 border-black shadow-[2px_2px_0px_0px_#000] overflow-hidden">
             {/* Currency toggle */}
-            <div className="flex bg-white/5 p-1 border-r border-white/10 shrink-0">
+            <div className="flex bg-[#F4F1EA] p-1 border-r-2 border-black shrink-0">
               <button
                 type="button"
                 onClick={() => setCurrency('ARS')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                className={`px-3 py-1 text-xs font-black font-mono rounded-lg transition-all border ${
                   currency === 'ARS'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-[#60A5FA] text-black border-black shadow-[1px_1px_0px_0px_#000]'
+                    : 'text-zinc-600 border-transparent hover:text-black'
                 }`}
               >
                 ARS ($)
@@ -187,10 +189,10 @@ export function TransactionModal({
               <button
                 type="button"
                 onClick={() => setCurrency('USD')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                className={`px-3 py-1 text-xs font-black font-mono rounded-lg transition-all border ${
                   currency === 'USD'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-[#86EFAC] text-black border-black shadow-[1px_1px_0px_0px_#000]'
+                    : 'text-zinc-600 border-transparent hover:text-black'
                 }`}
               >
                 USD (U$S)
@@ -205,19 +207,21 @@ export function TransactionModal({
               value={amount}
               onChange={e => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full bg-transparent px-3 py-2 text-lg font-bold text-white placeholder-zinc-600 focus:outline-none"
+              className="w-full bg-white px-3 py-2 text-lg font-mono font-black tabular-nums text-black placeholder-zinc-400 focus:outline-none"
             />
           </div>
         </div>
 
         {/* Category selector */}
         <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">Categoría</label>
+          <label className="block text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5">
+            Categoría
+          </label>
           <div className="relative">
             <select
               value={categoryId}
               onChange={e => setCategoryId(e.target.value)}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 transition-colors appearance-none"
+              className="w-full bg-white border-2 border-black rounded-xl px-3 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0px_0px_#000] focus:outline-none appearance-none"
             >
               <option value="">Seleccionar categoría...</option>
               {filteredCategories.map(cat => (
@@ -231,19 +235,30 @@ export function TransactionModal({
 
         {/* Payment Method Selector */}
         <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">Método de Pago</label>
+          <label className="block text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5">
+            Método de Pago
+          </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
             {PAYMENT_METHODS.map(pm => {
               const isSelected = paymentMethod === pm.value;
+              const activeColor =
+                pm.value === 'transferencia'
+                  ? 'bg-[#60A5FA]'
+                  : pm.value === 'tarjeta_debito'
+                  ? 'bg-[#FB923C]'
+                  : pm.value === 'tarjeta_credito'
+                  ? 'bg-[#C084FC]'
+                  : 'bg-[#FEF08A]';
+
               return (
                 <button
                   key={pm.value}
                   type="button"
                   onClick={() => setPaymentMethod(pm.value)}
-                  className={`py-2 px-2 text-xs font-medium rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
+                  className={`py-2 px-2 text-xs font-bold rounded-xl border-2 border-black flex items-center justify-center gap-1.5 transition-all ${
                     isSelected
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm font-semibold'
-                      : 'bg-white/5 text-zinc-400 border-white/5 hover:text-zinc-200 hover:bg-white/10'
+                      ? `${activeColor} text-black shadow-[2px_2px_0px_0px_#000]`
+                      : 'bg-white text-zinc-600 border-black/20 hover:border-black hover:text-black'
                   }`}
                 >
                   <span className="text-sm">{pm.icon}</span>
@@ -257,8 +272,8 @@ export function TransactionModal({
         {/* Date & Note */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
+            <label className="text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 stroke-[2.5px]" />
               Fecha
             </label>
             <input
@@ -266,13 +281,13 @@ export function TransactionModal({
               required
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
+              className="w-full bg-white border-2 border-black rounded-xl px-3 py-2 text-xs font-mono font-bold text-black shadow-[2px_2px_0px_0px_#000] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5" />
+            <label className="text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <FileText className="w-3.5 h-3.5 stroke-[2.5px]" />
               Concepto / Nota
             </label>
             <input
@@ -280,17 +295,17 @@ export function TransactionModal({
               value={note}
               onChange={e => setNote(e.target.value)}
               placeholder="Ej: Café con medialunas"
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+              className="w-full bg-white border-2 border-black rounded-xl px-3 py-2 text-xs font-bold text-black placeholder-zinc-400 shadow-[2px_2px_0px_0px_#000] focus:outline-none"
             />
           </div>
         </div>
 
         {/* Installments (Cuotas) - only when creating expense */}
         {type === 'expense' && !transactionToEdit && (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
+          <div className="bg-[#F4F1EA] border-2 border-black rounded-xl p-3 space-y-2 shadow-[2px_2px_0px_0px_#000]">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+              <label className="text-xs font-bold text-black flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 stroke-[2.5px] text-black" />
                 Pago en Cuotas
               </label>
               <select
@@ -302,7 +317,7 @@ export function TransactionModal({
                     setPaymentMethod('tarjeta_credito');
                   }
                 }}
-                className="bg-zinc-900 border border-white/15 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                className="bg-white border-2 border-black rounded-lg px-2 py-1 text-xs font-mono font-bold text-black shadow-[1px_1px_0px_0px_#000] focus:outline-none"
               >
                 <option value={1}>1 cuota (Débito / Contado)</option>
                 <option value={2}>2 cuotas</option>
@@ -316,11 +331,11 @@ export function TransactionModal({
             </div>
 
             {installments > 1 && (
-              <div className="text-[11px] text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg flex items-center justify-between">
+              <div className="text-xs font-bold text-black bg-[#C084FC] border-2 border-black p-2 rounded-lg flex items-center justify-between shadow-[1px_1px_0px_0px_#000]">
                 <span>
                   💳 {installments} cuotas mensuales de:
                 </span>
-                <span className="font-bold text-xs text-emerald-300">
+                <span className="font-mono font-black text-xs text-black">
                   {formatCurrency(perInstallmentAmount, currency)} / mes
                 </span>
               </div>
@@ -333,16 +348,16 @@ export function TransactionModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+            className="px-4 py-2 text-xs font-bold text-black bg-white hover:bg-zinc-100 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-1.5 px-5 py-2 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-5 py-2 text-xs font-black bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black rounded-xl shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000] disabled:opacity-50"
           >
-            <Check className="w-4 h-4 stroke-[2.5px]" />
+            <Check className="w-4 h-4 stroke-[3px]" />
             {loading ? 'Guardando...' : transactionToEdit ? 'Guardar Cambios' : 'Registrar'}
           </button>
         </div>

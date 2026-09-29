@@ -4,8 +4,7 @@ import React from 'react';
 import { Transaction } from '@/lib/supabase/types';
 import { formatCurrency, formatMonthYear } from '@/lib/utils';
 import { CategoryIcon } from '../UI/CategoryIcon';
-import { CurrencyBadge } from '../UI/CurrencyBadge';
-import { CreditCard, Calendar, CheckCircle2 } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 
 interface MonthlyInstallmentsProps {
   transactions: Transaction[];
@@ -54,37 +53,33 @@ export function MonthlyInstallments({ transactions, baseDate = new Date() }: Mon
         return (
           <div
             key={m.prefix}
-            className={`rounded-2xl bg-[#121216] border overflow-hidden shadow-lg transition-all ${
-              m.isCurrent ? 'border-purple-500/30' : 'border-white/10'
-            }`}
+            className="rounded-2xl bg-white border-2 border-black overflow-hidden shadow-[3px_3px_0px_0px_#000]"
           >
             {/* Month Header */}
             <div
-              className={`px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2 ${
-                m.isCurrent
-                  ? 'bg-purple-950/20 border-purple-500/20'
-                  : 'bg-white/[0.03] border-white/5'
+              className={`px-4 py-3 border-b-2 border-black flex flex-wrap items-center justify-between gap-2 ${
+                m.isCurrent ? 'bg-[#FEF08A]' : 'bg-[#F4F1EA]'
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white">{m.label}</span>
+                <span className="font-mono font-black text-sm text-black uppercase tracking-wider">{m.label}</span>
                 {m.isCurrent && (
-                  <span className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
-                    Mes en curso
+                  <span className="text-[10px] font-mono font-black bg-black text-white px-2 py-0.5 rounded border border-black">
+                    MES EN CURSO
                   </span>
                 )}
-                <span className="text-xs text-zinc-400">
+                <span className="text-xs font-mono font-bold text-zinc-600">
                   ({m.items.length} {m.items.length === 1 ? 'cuota' : 'cuotas'})
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">Total a pagar:</span>
-                <span className="text-sm font-extrabold text-white">
+                <span className="text-xs font-mono font-bold text-zinc-600">Total a pagar:</span>
+                <span className="text-sm font-mono font-black tabular-nums text-black">
                   {formatCurrency(m.totalArs, 'ARS')}
                 </span>
                 {m.totalUsd > 0 && (
-                  <span className="text-xs font-bold text-emerald-400">
+                  <span className="text-xs font-mono font-bold text-emerald-800 tabular-nums">
                     + {formatCurrency(m.totalUsd, 'USD')}
                   </span>
                 )}
@@ -93,31 +88,35 @@ export function MonthlyInstallments({ transactions, baseDate = new Date() }: Mon
 
             {/* Itemized List */}
             {m.items.length === 0 ? (
-              <div className="p-4 text-center text-xs text-zinc-500 italic">
+              <div className="p-5 text-center text-xs font-mono font-bold text-zinc-500 italic bg-white">
                 Sin cuotas comprometidas para este mes.
               </div>
             ) : (
-              <div className="divide-y divide-white/5">
+              <div className="divide-y-2 divide-black/10">
                 {m.items.map(item => (
                   <div
                     key={item.id}
-                    className="p-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors"
+                    className="p-3.5 flex items-center justify-between gap-3 hover:bg-[#F4F1EA]/50 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <CategoryIcon
-                        name={item.category?.icon}
-                        color={item.category?.color}
-                        size={18}
-                        className="w-10 h-10"
-                      />
+                      <div className="w-10 h-10 border-2 border-black rounded-xl bg-amber-100 flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
+                        <CategoryIcon
+                          name={item.category?.icon}
+                          color="#000000"
+                          size={20}
+                          className="w-5 h-5 text-black"
+                        />
+                      </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">
+                        <p className="text-sm font-bold text-black truncate">
                           {item.note || item.category?.name || 'Compra en cuotas'}
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-400">
-                          <span>{item.category?.name || 'General'}</span>
-                          <span className="inline-flex items-center gap-1 text-[10px] text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">
-                            <CreditCard className="w-2.5 h-2.5" />
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                          <span className="px-1.5 py-0.2 text-[10px] font-mono font-bold bg-[#F4F1EA] text-black border border-black rounded">
+                            [{item.category?.name || 'General'}]
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-black bg-[#C084FC] px-1.5 py-0.2 rounded border border-black shadow-[1px_1px_0px_0px_#000]">
+                            <CreditCard className="w-2.5 h-2.5 stroke-[2.5px]" />
                             Cuota {item.installment_current} de {item.installment_total}
                           </span>
                         </div>
@@ -125,10 +124,14 @@ export function MonthlyInstallments({ transactions, baseDate = new Date() }: Mon
                     </div>
 
                     <div className="text-right shrink-0">
-                      <p className="text-xs font-bold text-white">
+                      <p className="font-mono font-bold text-lg tabular-nums text-black">
                         {formatCurrency(item.amount, item.currency)}
                       </p>
-                      <CurrencyBadge currency={item.currency} className="mt-0.5 text-[10px]" />
+                      {item.currency === 'USD' && (
+                        <span className="inline-block px-1 py-0.2 bg-[#86EFAC] text-black font-mono font-bold text-[9px] border border-black rounded">
+                          USD
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

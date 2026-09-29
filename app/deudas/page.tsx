@@ -76,10 +76,13 @@ export default function DeudasPage() {
       {/* Title & Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+          <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
+            [CONTROL DE SALDOS]
+          </span>
+          <h2 className="text-xl md:text-2xl font-black text-black tracking-tight">
             Deudas & Préstamos
           </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs font-mono font-medium text-zinc-600 mt-0.5">
             Gestión de saldos pendientes a cobrar y pagar
           </p>
         </div>
@@ -88,14 +91,14 @@ export default function DeudasPage() {
           <button
             onClick={loadData}
             disabled={loading}
-            className="p-2 text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all disabled:opacity-50"
+            className="p-2 text-black bg-white hover:bg-zinc-100 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px] disabled:opacity-50"
             title="Recargar"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 stroke-[2.5px] ${loading ? 'animate-spin text-[#FACC15]' : ''}`} />
           </button>
           <button
             onClick={() => setIsNewDebtModalOpen(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black font-semibold text-xs py-2 px-3.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+            className="flex items-center gap-2 bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black text-xs py-2 px-3.5 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000]"
           >
             <PlusCircle className="w-4 h-4 stroke-[2.5px]" />
             <span>Nueva Deuda</span>
@@ -108,32 +111,34 @@ export default function DeudasPage() {
         {/* Me deben */}
         <div
           onClick={() => setActiveTab('owed')}
-          className={`cursor-pointer rounded-2xl p-5 border transition-all ${
+          className={`cursor-pointer rounded-2xl p-5 border-2 border-black transition-all ${
             activeTab === 'owed'
-              ? 'bg-emerald-950/20 border-emerald-500/40 shadow-lg shadow-emerald-500/5'
-              : 'bg-[#121216] border-white/10 hover:border-white/20'
+              ? 'bg-[#86EFAC] shadow-[4px_4px_0px_0px_#000]'
+              : 'bg-white shadow-[2px_2px_0px_0px_#000] hover:-translate-y-0.5'
           }`}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-                <ArrowDownLeft className="w-5 h-5" />
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-white border-2 border-black text-black shadow-[1px_1px_0px_0px_#000]">
+                <ArrowDownLeft className="w-5 h-5 stroke-[2.5px]" />
               </div>
               <div>
-                <span className="text-xs font-semibold text-zinc-300">Me deben (A cobrar)</span>
-                <p className="text-[11px] text-zinc-400">Dinero que te tienen que devolver</p>
+                <span className="text-xs font-mono font-black uppercase text-black">Me deben (A cobrar)</span>
+                <p className="text-[11px] font-mono font-semibold text-zinc-700">Dinero que te tienen que devolver</p>
               </div>
             </div>
             {activeTab === 'owed' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              <span className="font-mono font-black text-[10px] bg-black text-white px-2 py-0.5 rounded border border-black">
+                ACTIVO
+              </span>
             )}
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-black text-white">
+            <h3 className="text-2xl font-mono font-black tabular-nums text-black">
               {formatCurrency(totalOwedToMeArs, 'ARS')}
             </h3>
             {totalOwedToMeUsd > 0 && (
-              <p className="text-sm font-bold text-emerald-400 mt-1">
+              <p className="text-sm font-mono font-bold text-emerald-900 mt-1">
                 + {formatCurrency(totalOwedToMeUsd, 'USD')}
               </p>
             )}
@@ -143,32 +148,34 @@ export default function DeudasPage() {
         {/* Debo */}
         <div
           onClick={() => setActiveTab('owe')}
-          className={`cursor-pointer rounded-2xl p-5 border transition-all ${
+          className={`cursor-pointer rounded-2xl p-5 border-2 border-black transition-all ${
             activeTab === 'owe'
-              ? 'bg-rose-950/20 border-rose-500/40 shadow-lg shadow-rose-500/5'
-              : 'bg-[#121216] border-white/10 hover:border-white/20'
+              ? 'bg-[#FB923C] shadow-[4px_4px_0px_0px_#000]'
+              : 'bg-white shadow-[2px_2px_0px_0px_#000] hover:-translate-y-0.5'
           }`}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400">
-                <ArrowUpRight className="w-5 h-5" />
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-white border-2 border-black text-black shadow-[1px_1px_0px_0px_#000]">
+                <ArrowUpRight className="w-5 h-5 stroke-[2.5px]" />
               </div>
               <div>
-                <span className="text-xs font-semibold text-zinc-300">Debo (A pagar)</span>
-                <p className="text-[11px] text-zinc-400">Tus compromisos con personas o servicios</p>
+                <span className="text-xs font-mono font-black uppercase text-black">Debo (A pagar)</span>
+                <p className="text-[11px] font-mono font-semibold text-zinc-700">Tus compromisos con personas o servicios</p>
               </div>
             </div>
             {activeTab === 'owe' && (
-              <span className="w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
+              <span className="font-mono font-black text-[10px] bg-black text-white px-2 py-0.5 rounded border border-black">
+                ACTIVO
+              </span>
             )}
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-black text-white">
+            <h3 className="text-2xl font-mono font-black tabular-nums text-black">
               {formatCurrency(totalIOweArs, 'ARS')}
             </h3>
             {totalIOweUsd > 0 && (
-              <p className="text-sm font-bold text-rose-400 mt-1">
+              <p className="text-sm font-mono font-bold text-black mt-1">
                 + {formatCurrency(totalIOweUsd, 'USD')}
               </p>
             )}
@@ -177,25 +184,25 @@ export default function DeudasPage() {
       </div>
 
       {/* Tabs & Settled Filter Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#121216] border border-white/10 p-2.5 rounded-2xl shadow-lg">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border-2 border-black p-2.5 rounded-2xl shadow-[3px_3px_0px_0px_#000]">
         {/* Tab Switcher */}
-        <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+        <div className="flex bg-[#F4F1EA] p-1 rounded-xl border-2 border-black gap-1">
           <button
             onClick={() => setActiveTab('owed')}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all border ${
               activeTab === 'owed'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-[#86EFAC] text-black font-black border-black shadow-[1px_1px_0px_0px_#000]'
+                : 'text-zinc-600 border-transparent hover:text-black'
             }`}
           >
             💰 Me deben ({debts.filter(d => d.type === 'owed' && d.status === 'active').length})
           </button>
           <button
             onClick={() => setActiveTab('owe')}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all border ${
               activeTab === 'owe'
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-[#FB923C] text-black font-black border-black shadow-[1px_1px_0px_0px_#000]'
+                : 'text-zinc-600 border-transparent hover:text-black'
             }`}
           >
             🚨 Debo ({debts.filter(d => d.type === 'owe' && d.status === 'active').length})
@@ -205,34 +212,34 @@ export default function DeudasPage() {
         {/* Toggle Settled Debts */}
         <button
           onClick={() => setShowSettled(!showSettled)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold border-2 border-black transition-all ${
             showSettled
-              ? 'bg-white/15 text-white border-white/20'
-              : 'text-zinc-400 hover:text-zinc-200 border-white/5 bg-white/5'
+              ? 'bg-[#FACC15] text-black shadow-[2px_2px_0px_0px_#000]'
+              : 'text-zinc-700 hover:text-black bg-white shadow-[1px_1px_0px_0px_#000]'
           }`}
         >
-          <CheckCircle className="w-3.5 h-3.5" />
+          <CheckCircle className="w-3.5 h-3.5 stroke-[2.5px]" />
           <span>{showSettled ? 'Ocultar saldadas' : 'Ver saldadas'}</span>
         </button>
       </div>
 
       {/* Debts Grid */}
       {displayDebts.length === 0 ? (
-        <div className="rounded-2xl bg-[#121216] border border-white/10 p-12 text-center shadow-lg">
-          <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mx-auto text-zinc-500 mb-3">
-            <Inbox className="w-6 h-6 stroke-[1.5px]" />
+        <div className="rounded-2xl bg-white border-2 border-black p-12 text-center shadow-[3px_3px_0px_0px_#000]">
+          <div className="w-12 h-12 rounded-xl bg-[#FACC15] border-2 border-black flex items-center justify-center mx-auto text-black mb-3 shadow-[2px_2px_0px_0px_#000]">
+            <Inbox className="w-6 h-6 stroke-[2.5px]" />
           </div>
-          <h4 className="text-sm font-semibold text-white">No hay deudas registradas</h4>
-          <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
+          <h4 className="text-sm font-black text-black">No hay deudas registradas</h4>
+          <p className="text-xs font-mono font-medium text-zinc-600 mt-1 max-w-sm mx-auto">
             {activeTab === 'owed'
               ? '¡Excelente! Nadie te debe dinero actualmente.'
               : '¡Genial! No tenés compromisos de deuda activos.'}
           </p>
           <button
             onClick={() => setIsNewDebtModalOpen(true)}
-            className="mt-4 inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
+            className="mt-4 inline-flex items-center gap-1.5 text-xs font-mono font-bold bg-[#86EFAC] text-black px-3 py-1.5 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-4 h-4 stroke-[2.5px]" />
             <span>Registrar nueva deuda</span>
           </button>
         </div>

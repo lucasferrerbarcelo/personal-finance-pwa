@@ -17,28 +17,28 @@ export function getPaymentMethodConfig(method?: PaymentMethod | null) {
         label: 'Efectivo',
         icon: Banknote,
         emoji: '💵',
-        colorClass: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+        colorClass: 'bg-[#FEF08A] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]',
       };
     case 'tarjeta_credito':
       return {
         label: 'Crédito',
         icon: CreditCard,
         emoji: '💳',
-        colorClass: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
+        colorClass: 'bg-[#C084FC] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]',
       };
     case 'tarjeta_debito':
       return {
         label: 'Débito',
         icon: CreditCard,
         emoji: '💳',
-        colorClass: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+        colorClass: 'bg-[#FB923C] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]',
       };
     case 'transferencia':
       return {
         label: 'Transferencia',
         icon: ArrowLeftRight,
         emoji: '📱',
-        colorClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+        colorClass: 'bg-[#60A5FA] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]',
       };
     case 'otro':
     default:
@@ -46,7 +46,7 @@ export function getPaymentMethodConfig(method?: PaymentMethod | null) {
         label: 'Otro',
         icon: HelpCircle,
         emoji: '🔄',
-        colorClass: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
+        colorClass: 'bg-white text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]',
       };
   }
 }
@@ -61,10 +61,10 @@ export function PaymentMethodBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${config.colorClass} ${className}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${config.colorClass} ${className}`}
       title={`Método: ${config.label}`}
     >
-      <Icon className="w-2.5 h-2.5" />
+      <Icon className="w-3 h-3 stroke-[2.5px]" />
       {!compact && <span>{config.label}</span>}
     </span>
   );

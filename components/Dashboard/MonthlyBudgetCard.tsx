@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Transaction, Budget } from '@/lib/supabase/types';
 import { fetchMonthlyBudget, saveMonthlyBudget } from '@/lib/supabase/client';
 import { formatCurrency, formatMonthYear } from '@/lib/utils';
-import { Target, TrendingUp, AlertTriangle, AlertCircle, CheckCircle2, Pencil, Plus } from 'lucide-react';
+import { Target, AlertTriangle, AlertCircle, CheckCircle2, Pencil, Plus } from 'lucide-react';
 import { Modal } from '@/components/UI/Modal';
 
 interface MonthlyBudgetCardProps {
@@ -59,29 +59,23 @@ export function MonthlyBudgetCard({
   const remaining = budgetAmount - monthlyExpensesArs;
   const isOver = remaining < 0;
 
-  // Determine progress status colors:
+  // Determine progress status colors in Bauhaus:
   // verde if <75%, amarilla if 75-99%, roja if >=100%
-  let statusColor = 'emerald';
-  let barBg = 'bg-emerald-500';
-  let barGlow = 'shadow-emerald-500/20';
-  let badgeBg = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-  let statusIcon = <CheckCircle2 className="w-3.5 h-3.5" />;
+  let barBg = 'bg-[#86EFAC]';
+  let badgeBg = 'bg-[#86EFAC] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]';
+  let statusIcon = <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5px]" />;
   let statusText = `${percentage}% consumido`;
 
   if (percentage >= 100) {
-    statusColor = 'rose';
-    barBg = 'bg-rose-500';
-    barGlow = 'shadow-rose-500/20';
-    badgeBg = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
-    statusIcon = <AlertCircle className="w-3.5 h-3.5" />;
+    barBg = 'bg-[#FB923C]';
+    badgeBg = 'bg-[#FB923C] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]';
+    statusIcon = <AlertCircle className="w-3.5 h-3.5 stroke-[2.5px]" />;
     statusText = `¡Excedido por ${formatCurrency(Math.abs(remaining), 'ARS')}!`;
   } else if (percentage >= 75) {
-    statusColor = 'amber';
-    barBg = 'bg-amber-500';
-    barGlow = 'shadow-amber-500/20';
-    badgeBg = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-    statusIcon = <AlertTriangle className="w-3.5 h-3.5" />;
-    statusText = `${percentage}% (alerta de consumo)`;
+    barBg = 'bg-[#FACC15]';
+    badgeBg = 'bg-[#FACC15] text-black border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000]';
+    statusIcon = <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5px]" />;
+    statusText = `${percentage}% (alerta)`;
   }
 
   const handleOpenModal = () => {
@@ -111,17 +105,20 @@ export function MonthlyBudgetCard({
 
   return (
     <>
-      <div className="relative overflow-hidden rounded-2xl bg-[#121216] border border-white/10 p-5 shadow-lg transition-all">
+      <div className="bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_0px_#000] p-5 text-black">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              <Target className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-[#FACC15] border-2 border-black shadow-[2px_2px_0px_0px_#000] flex items-center justify-center">
+              <Target className="w-5 h-5 text-black stroke-[2.5px]" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white tracking-tight flex items-center gap-2">
-                <span>Presupuesto Mensual</span>
-                <span className="text-[11px] font-normal text-zinc-400">
+              <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-0.5">
+                [PRESUPUESTO MENSUAL]
+              </span>
+              <h3 className="text-base font-black tracking-tight text-black flex items-center gap-1.5">
+                <span>Límite de Consumo</span>
+                <span className="text-xs font-mono font-semibold text-zinc-500">
                   ({formatMonthYear(new Date())})
                 </span>
               </h3>
@@ -131,7 +128,7 @@ export function MonthlyBudgetCard({
           <div className="flex items-center gap-2">
             {budget && budgetAmount > 0 && (
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${badgeBg}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono font-black ${badgeBg}`}
               >
                 {statusIcon}
                 <span>{statusText}</span>
@@ -140,16 +137,16 @@ export function MonthlyBudgetCard({
 
             <button
               onClick={handleOpenModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F4F1EA] hover:bg-[#FACC15] text-black border-2 border-black rounded-xl text-xs font-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000]"
             >
               {budget && budgetAmount > 0 ? (
                 <>
-                  <Pencil className="w-3.5 h-3.5" />
+                  <Pencil className="w-3.5 h-3.5 stroke-[2.5px]" />
                   <span>Editar</span>
                 </>
               ) : (
                 <>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5 stroke-[3px]" />
                   <span>Fijar Presupuesto</span>
                 </>
               )}
@@ -162,63 +159,63 @@ export function MonthlyBudgetCard({
             {/* Amount details */}
             <div className="flex flex-wrap items-baseline justify-between gap-2 mt-4">
               <div>
-                <span className="text-xs text-zinc-400">Gastado hasta hoy: </span>
-                <span className="text-lg md:text-xl font-black text-white">
+                <span className="text-xs font-bold text-zinc-600 uppercase font-mono">Gastado hasta hoy: </span>
+                <div className="text-xl sm:text-2xl font-black font-mono tabular-nums text-black">
                   {formatCurrency(monthlyExpensesArs, 'ARS')}
-                </span>
+                </div>
               </div>
               <div className="text-right">
-                <span className="text-xs text-zinc-400">Tope mensual: </span>
-                <span className="text-sm md:text-base font-bold text-zinc-200">
+                <span className="text-xs font-bold text-zinc-600 uppercase font-mono">Tope mensual: </span>
+                <div className="text-lg sm:text-xl font-black font-mono tabular-nums text-black">
                   {formatCurrency(budgetAmount, 'ARS')}
-                </span>
+                </div>
               </div>
             </div>
 
             {/* Visual Progress Bar */}
             <div className="mt-3">
-              <div className="relative w-full h-3.5 bg-zinc-800/80 rounded-full overflow-hidden p-0.5 border border-white/5">
+              <div className="w-full h-4 bg-[#F4F1EA] border-2 border-black rounded-full overflow-hidden p-0.5 shadow-[1px_1px_0px_0px_#000]">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 shadow-md ${barBg} ${barGlow}`}
+                  className={`h-full rounded-full transition-all duration-500 border-r-2 border-black ${barBg}`}
                   style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
                 />
               </div>
             </div>
 
-            {/* Footer details: Remaining or Exceeded */}
-            <div className="flex items-center justify-between text-xs text-zinc-400 mt-2.5 pt-2 border-t border-white/5">
+            {/* Footer details */}
+            <div className="flex flex-wrap items-center justify-between text-xs font-mono font-bold text-zinc-700 mt-3 pt-2.5 border-t-2 border-black/10">
               <span>
                 {isOver ? (
-                  <span className="text-rose-400 font-medium">
-                    🚨 Límite superado por {formatCurrency(Math.abs(remaining), 'ARS')}
+                  <span className="text-rose-700 font-black">
+                    🚨 LÍMITE SUPERADO POR {formatCurrency(Math.abs(remaining), 'ARS')}
                   </span>
                 ) : (
                   <span>
-                    Disponible restante:{' '}
-                    <strong className="text-emerald-400 font-semibold">
+                    DISPONIBLE:{' '}
+                    <strong className="text-black font-black">
                       {formatCurrency(remaining, 'ARS')}
                     </strong>
                   </span>
                 )}
               </span>
-              <span className="text-[11px] text-zinc-500">
-                {percentage}% del total fijado
+              <span className="text-zinc-600">
+                {percentage}% DEL TOTAL
               </span>
             </div>
           </div>
         ) : (
-          <div className="mt-2 py-3 px-4 rounded-xl bg-white/[0.02] border border-dashed border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="text-xs text-zinc-400">
-              <p className="text-zinc-300 font-medium">Sin presupuesto asignado para este mes</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">
+          <div className="mt-2 py-4 px-4 rounded-xl bg-[#F4F1EA] border-2 border-dashed border-black/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="text-xs text-zinc-800">
+              <p className="font-black text-black">Sin presupuesto asignado para este mes</p>
+              <p className="text-[11px] font-medium text-zinc-600 mt-0.5">
                 Definí un límite de gastos mensual para monitorear tu progreso y recibir alertas automáticas.
               </p>
             </div>
             <button
               onClick={handleOpenModal}
-              className="shrink-0 flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold py-2 px-3 rounded-xl transition-all active:scale-95"
+              className="shrink-0 flex items-center gap-1.5 bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] text-xs font-black py-2 px-3.5 rounded-xl transition-all active:translate-x-[1px] active:translate-y-[1px]"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 stroke-[3px]" />
               <span>Establecer Presupuesto</span>
             </button>
           </div>
@@ -232,13 +229,13 @@ export function MonthlyBudgetCard({
         title={budget && budgetAmount > 0 ? 'Editar Presupuesto Mensual' : 'Fijar Presupuesto Mensual'}
         subtitle={`Para el mes de ${formatMonthYear(new Date())}`}
       >
-        <form onSubmit={handleSaveBudget} className="space-y-4">
+        <form onSubmit={handleSaveBudget} className="space-y-4 text-black">
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+            <label className="block text-xs font-black text-black uppercase font-mono mb-1.5">
               Monto tope mensual (ARS)
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 font-semibold text-sm">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black font-black text-sm">
                 $
               </span>
               <input
@@ -249,21 +246,21 @@ export function MonthlyBudgetCard({
                 onChange={e => setInputAmount(e.target.value)}
                 placeholder="Ej: 600000"
                 required
-                className="w-full bg-[#18181f] border border-white/10 rounded-xl pl-8 pr-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                className="w-full bg-white border-2 border-black rounded-xl pl-8 pr-4 py-2.5 text-sm font-mono font-bold text-black placeholder:text-zinc-400 shadow-[2px_2px_0px_0px_#000] focus:outline-none"
               />
             </div>
           </div>
 
           {/* Quick Presets */}
           <div>
-            <span className="block text-[11px] text-zinc-500 mb-1.5">Valores rápidos:</span>
-            <div className="flex flex-wrap gap-1.5">
+            <span className="block text-[11px] font-mono font-bold text-zinc-600 mb-1.5">[VALORES RÁPIDOS]:</span>
+            <div className="flex flex-wrap gap-2">
               {presets.map(p => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setInputAmount(String(p))}
-                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[11px] text-zinc-300 transition-colors"
+                  className="px-3 py-1 rounded-lg bg-white hover:bg-[#FACC15] border-2 border-black shadow-[1.5px_1.5px_0px_0px_#000] text-xs font-mono font-bold text-black transition-all active:translate-x-[1px] active:translate-y-[1px]"
                 >
                   ${(p / 1000).toLocaleString('es-AR')}k
                 </button>
@@ -271,18 +268,18 @@ export function MonthlyBudgetCard({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t-2 border-black/10">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-bold text-black hover:bg-black/5 border-2 border-transparent transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving || !inputAmount || Number(inputAmount) <= 0}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 active:scale-95"
+              className="px-5 py-2.5 rounded-xl text-xs font-black bg-[#FACC15] hover:bg-[#eab308] text-black border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all disabled:opacity-50 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000]"
             >
               {saving ? 'Guardando...' : 'Guardar Presupuesto'}
             </button>

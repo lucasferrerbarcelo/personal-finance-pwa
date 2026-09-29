@@ -64,17 +64,17 @@ export function InstallmentBarChart({ transactions, baseDate = new Date() }: Ins
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="rounded-xl bg-[#18181b] border border-white/10 p-3 shadow-2xl text-xs space-y-1">
-          <p className="font-bold text-white mb-1.5">{data.fullLabel}</p>
-          <p className="text-purple-400 font-semibold">
+        <div className="rounded-xl bg-white border-2 border-black p-3 shadow-[3px_3px_0px_0px_#000] text-xs font-mono text-black space-y-1">
+          <p className="font-black text-black mb-1.5 uppercase tracking-wider">{data.fullLabel}</p>
+          <p className="text-black font-black tabular-nums">
             ARS: {formatCurrency(data.ARS, 'ARS')}
           </p>
           {data.USD > 0 && (
-            <p className="text-emerald-400 font-semibold">
+            <p className="text-emerald-800 font-bold tabular-nums">
               USD: {formatCurrency(data.USD, 'USD')}
             </p>
           )}
-          <p className="text-[11px] text-zinc-400 pt-1 border-t border-white/10">
+          <p className="text-[11px] text-zinc-600 pt-1 border-t-2 border-black/10 font-bold">
             {data.count} {data.count === 1 ? 'cuota comprometida' : 'cuotas comprometidas'}
           </p>
         </div>
@@ -86,36 +86,40 @@ export function InstallmentBarChart({ transactions, baseDate = new Date() }: Ins
   const hasAnyInstallments = chartData.some(d => d.ARS > 0 || d.USD > 0);
 
   return (
-    <div className="rounded-2xl bg-[#121216] border border-white/10 p-5 shadow-lg">
-      <div className="flex items-center justify-between pb-4 border-b border-white/5">
+    <div className="bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_0px_#000] p-5 text-black">
+      <div className="flex items-center justify-between pb-4 border-b-2 border-black/10">
         <div>
-          <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-            <CalendarRange className="w-4 h-4 text-purple-400" />
+          <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
+            [PROYECCIÓN TEMPORAL]
+          </span>
+          <h3 className="text-base font-black text-black tracking-tight flex items-center gap-2">
+            <CalendarRange className="w-4 h-4 stroke-[2.5px] text-black" />
             Compromiso en Cuotas (Próximos 6 Meses)
           </h3>
-          <p className="text-xs text-zinc-400">Evolución de cuotas pendientes a pagar</p>
+          <p className="text-xs font-mono font-medium text-zinc-600">Evolución de cuotas pendientes a pagar</p>
         </div>
       </div>
 
       <div className="py-4">
         {!hasAnyInstallments ? (
-          <div className="h-60 flex flex-col items-center justify-center text-zinc-500 text-xs">
-            <CalendarRange className="w-8 h-8 opacity-40 mb-2" />
+          <div className="h-60 flex flex-col items-center justify-center text-zinc-500 text-xs font-mono font-bold bg-[#F4F1EA] border-2 border-dashed border-black/30 rounded-xl">
+            <CalendarRange className="w-8 h-8 stroke-[2px] opacity-40 mb-2" />
             <span>No hay cuotas registradas para los próximos 6 meses</span>
           </div>
         ) : (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="label" stroke="#71717a" fontSize={11} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
+                <XAxis dataKey="label" stroke="#000000" fontSize={11} className="font-mono font-bold" />
                 <YAxis
-                  stroke="#71717a"
+                  stroke="#000000"
                   fontSize={11}
+                  className="font-mono font-bold"
                   tickFormatter={v => (v >= 1000 ? `$${v / 1000}k` : `$${v}`)}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="ARS" fill="#a855f7" radius={[6, 6, 0, 0]} name="Cuotas ARS" />
+                <Bar dataKey="ARS" fill="#C084FC" stroke="#000000" strokeWidth={1.5} radius={[6, 6, 0, 0]} name="Cuotas ARS" />
               </BarChart>
             </ResponsiveContainer>
           </div>

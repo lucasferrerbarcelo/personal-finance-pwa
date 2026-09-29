@@ -32,8 +32,8 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-nav border-t border-white/10 bg-[#09090b]/90 backdrop-blur-xl">
-      <div className="flex items-center justify-around h-16 max-w-md mx-auto px-2">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t-2 border-black bg-[#F4F1EA] shadow-[0px_-2px_0px_0px_#000]">
+      <div className="flex items-center justify-around h-16 max-w-md mx-auto px-3">
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -42,19 +42,14 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center w-full h-full py-1 transition-all ${
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
                 isActive
-                  ? 'text-emerald-400 font-semibold scale-105'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-[#FACC15] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] font-black scale-105'
+                  : 'text-zinc-600 hover:text-black font-bold'
               }`}
             >
-              <div className="relative">
-                <Icon className={`w-5 h-5 transition-transform ${isActive ? 'stroke-[2.5px]' : 'stroke-[1.75px]'}`} />
-                {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                )}
-              </div>
-              <span className="text-[11px] mt-1 tracking-tight">{item.name}</span>
+              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-[2px]'}`} />
+              <span className="text-[10px] mt-0.5 tracking-tight font-sans">{item.name}</span>
             </Link>
           );
         })}

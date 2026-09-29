@@ -46,18 +46,18 @@ export function Modal({
 
       {/* Modal Dialog / Mobile Bottom Sheet */}
       <div
-        className={`relative z-10 w-full ${maxWidth} rounded-t-2xl sm:rounded-2xl bg-[#121216] border border-white/10 p-6 shadow-2xl transition-all animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}
+        className={`relative z-10 w-full ${maxWidth} rounded-t-2xl sm:rounded-2xl bg-[#F4F1EA] border-2 border-black p-6 shadow-[6px_6px_0px_0px_#000] text-black transition-all animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}
       >
-        <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        <div className="flex items-center justify-between pb-3.5 border-b-2 border-black">
           <div>
-            <h2 className="text-lg font-semibold text-white tracking-tight">{title}</h2>
-            {subtitle && <p className="text-xs text-zinc-400 mt-0.5">{subtitle}</p>}
+            <h2 className="text-lg font-black text-black tracking-tight">{title}</h2>
+            {subtitle && <p className="text-xs font-mono font-semibold text-zinc-600 mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+            className="rounded-lg p-1.5 bg-white border-2 border-black text-black hover:bg-[#FB923C] shadow-[1.5px_1.5px_0px_0px_#000] transition-colors active:translate-x-[1px] active:translate-y-[1px]"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 stroke-[2.5px]" />
           </button>
         </div>
 

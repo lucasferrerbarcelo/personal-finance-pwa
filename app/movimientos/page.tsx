@@ -97,10 +97,13 @@ export default function MovimientosPage() {
       {/* Page Title & Add Button */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+          <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
+            [HISTORIAL COMPLETO]
+          </span>
+          <h2 className="text-xl md:text-2xl font-black text-black tracking-tight">
             Movimientos
           </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs font-mono font-medium text-zinc-600 mt-0.5">
             Registro detallado de transacciones e historial
           </p>
         </div>
@@ -109,14 +112,14 @@ export default function MovimientosPage() {
           <button
             onClick={loadData}
             disabled={loading}
-            className="p-2 text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all disabled:opacity-50"
+            className="p-2 text-black bg-white hover:bg-zinc-100 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px] disabled:opacity-50"
             title="Recargar"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 stroke-[2.5px] ${loading ? 'animate-spin text-[#FACC15]' : ''}`} />
           </button>
           <button
             onClick={openNewTxModal}
-            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black font-semibold text-xs py-2 px-3.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+            className="flex items-center gap-2 bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black text-xs py-2 px-3.5 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000]"
           >
             <PlusCircle className="w-4 h-4 stroke-[2.5px]" />
             <span>Nuevo Movimiento</span>
@@ -126,27 +129,27 @@ export default function MovimientosPage() {
 
       {/* Filter Stats Pill Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl bg-[#121216] border border-white/10 p-3">
-          <span className="text-[10px] text-zinc-400 block font-medium">Gastos Mes (ARS)</span>
-          <span className="text-base font-extrabold text-white mt-0.5 block">
+        <div className="rounded-xl bg-white border-2 border-black p-3 shadow-[2px_2px_0px_0px_#000]">
+          <span className="text-[10px] font-mono font-bold uppercase text-zinc-600 block">Gastos Mes (ARS)</span>
+          <span className="text-base font-mono font-black tabular-nums text-black mt-0.5 block">
             {formatCurrency(totalExpensesArs, 'ARS')}
           </span>
         </div>
-        <div className="rounded-xl bg-[#121216] border border-white/10 p-3">
-          <span className="text-[10px] text-zinc-400 block font-medium">Ingresos Mes (ARS)</span>
-          <span className="text-base font-extrabold text-emerald-400 mt-0.5 block">
+        <div className="rounded-xl bg-[#86EFAC]/30 border-2 border-black p-3 shadow-[2px_2px_0px_0px_#000]">
+          <span className="text-[10px] font-mono font-bold uppercase text-emerald-900 block">Ingresos Mes (ARS)</span>
+          <span className="text-base font-mono font-black tabular-nums text-emerald-800 mt-0.5 block">
             {formatCurrency(totalIncomeArs, 'ARS')}
           </span>
         </div>
-        <div className="rounded-xl bg-[#121216] border border-white/10 p-3">
-          <span className="text-[10px] text-zinc-400 block font-medium">Gastos Mes (USD)</span>
-          <span className="text-base font-extrabold text-white mt-0.5 block">
+        <div className="rounded-xl bg-white border-2 border-black p-3 shadow-[2px_2px_0px_0px_#000]">
+          <span className="text-[10px] font-mono font-bold uppercase text-zinc-600 block">Gastos Mes (USD)</span>
+          <span className="text-base font-mono font-black tabular-nums text-black mt-0.5 block">
             {formatCurrency(totalExpensesUsd, 'USD')}
           </span>
         </div>
-        <div className="rounded-xl bg-[#121216] border border-white/10 p-3">
-          <span className="text-[10px] text-zinc-400 block font-medium">Ingresos Mes (USD)</span>
-          <span className="text-base font-extrabold text-emerald-400 mt-0.5 block">
+        <div className="rounded-xl bg-[#86EFAC]/30 border-2 border-black p-3 shadow-[2px_2px_0px_0px_#000]">
+          <span className="text-[10px] font-mono font-bold uppercase text-emerald-900 block">Ingresos Mes (USD)</span>
+          <span className="text-base font-mono font-black tabular-nums text-emerald-800 mt-0.5 block">
             {formatCurrency(totalIncomeUsd, 'USD')}
           </span>
         </div>

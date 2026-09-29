@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         triggerRefresh,
       }}
     >
-      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col md:flex-row antialiased selection:bg-emerald-500/30">
+      <div className="min-h-screen bg-[#F4F1EA] text-black flex flex-col md:flex-row antialiased selection:bg-[#FACC15] selection:text-black">
         {/* Desktop Sidebar */}
         <DesktopSidebar onOpenNewTxModal={openNewTxModal} />
 

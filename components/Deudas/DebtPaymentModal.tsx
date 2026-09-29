@@ -87,23 +87,23 @@ export function DebtPaymentModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="p-3 text-xs bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl">
+          <div className="p-3 text-xs bg-[#FB923C]/20 border-2 border-black text-black font-bold rounded-xl shadow-[2px_2px_0px_0px_#000]">
             {error}
           </div>
         )}
 
         {/* Debt Current Status Box */}
-        <div className="rounded-xl bg-white/5 border border-white/10 p-3 flex items-center justify-between text-xs">
+        <div className="rounded-xl bg-[#F4F1EA] border-2 border-black p-3.5 flex items-center justify-between text-xs shadow-[2px_2px_0px_0px_#000]">
           <div>
-            <span className="text-zinc-400 block">Saldo restante:</span>
-            <span className="text-base font-extrabold text-white">
+            <span className="text-[10px] font-mono font-bold uppercase text-zinc-600 block">Saldo restante:</span>
+            <span className="text-base font-mono font-black tabular-nums text-black">
               {formatCurrency(debt.remaining_amount, debt.currency)}
             </span>
           </div>
           <button
             type="button"
             onClick={handlePayFull}
-            className="px-2.5 py-1 text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg transition-colors"
+            className="px-2.5 py-1 text-xs font-mono font-bold text-black bg-[#FACC15] hover:bg-[#eab308] border-2 border-black rounded-lg transition-all shadow-[1px_1px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
           >
             Saldar total
           </button>
@@ -111,9 +111,11 @@ export function DebtPaymentModal({
 
         {/* Amount Input */}
         <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1.5">Monto a abonar</label>
-          <div className="flex rounded-xl bg-white/5 border border-white/10 overflow-hidden focus-within:border-emerald-500/50">
-            <span className="px-3.5 py-2 text-xs font-bold text-zinc-400 bg-white/5 border-r border-white/10 flex items-center">
+          <label className="block text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5">
+            Monto a abonar
+          </label>
+          <div className="flex rounded-xl bg-white border-2 border-black shadow-[2px_2px_0px_0px_#000] overflow-hidden">
+            <span className="px-3.5 py-2 text-xs font-mono font-black text-black bg-[#F4F1EA] border-r-2 border-black flex items-center">
               {debt.currency}
             </span>
             <input
@@ -125,7 +127,7 @@ export function DebtPaymentModal({
               value={amount}
               onChange={e => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full bg-transparent px-3 py-2 text-base font-bold text-white placeholder-zinc-600 focus:outline-none"
+              className="w-full bg-white px-3 py-2 text-lg font-mono font-black tabular-nums text-black placeholder-zinc-400 focus:outline-none"
             />
           </div>
         </div>
@@ -133,8 +135,8 @@ export function DebtPaymentModal({
         {/* Date & Note */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
+            <label className="text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 stroke-[2.5px]" />
               Fecha
             </label>
             <input
@@ -142,13 +144,13 @@ export function DebtPaymentModal({
               required
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+              className="w-full bg-white border-2 border-black rounded-xl px-3 py-2 text-xs font-mono font-bold text-black shadow-[2px_2px_0px_0px_#000] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5" />
+            <label className="text-xs font-mono font-bold text-black uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <FileText className="w-3.5 h-3.5 stroke-[2.5px]" />
               Comprobante / Nota
             </label>
             <input
@@ -156,7 +158,7 @@ export function DebtPaymentModal({
               value={note}
               onChange={e => setNote(e.target.value)}
               placeholder="Ej: Transferencia MercadoPago"
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50"
+              className="w-full bg-white border-2 border-black rounded-xl px-3 py-2 text-xs font-bold text-black placeholder-zinc-400 shadow-[2px_2px_0px_0px_#000] focus:outline-none"
             />
           </div>
         </div>
@@ -166,16 +168,16 @@ export function DebtPaymentModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+            className="px-4 py-2 text-xs font-bold text-black bg-white hover:bg-zinc-100 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-1.5 px-5 py-2 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-5 py-2 text-xs font-black bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black rounded-xl shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000] disabled:opacity-50"
           >
-            <Check className="w-4 h-4 stroke-[2.5px]" />
+            <Check className="w-4 h-4 stroke-[3px]" />
             {loading ? 'Registrando...' : 'Confirmar Pago'}
           </button>
         </div>

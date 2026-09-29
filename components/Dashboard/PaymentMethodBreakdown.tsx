@@ -3,59 +3,44 @@
 import React, { useState } from 'react';
 import { PaymentMethod, Transaction } from '@/lib/supabase/types';
 import { formatCurrency } from '@/lib/utils';
-import { Wallet, Banknote, CreditCard, ArrowLeftRight, HelpCircle } from 'lucide-react';
+import { Banknote, CreditCard, ArrowLeftRight } from 'lucide-react';
 
 interface PaymentMethodBreakdownProps {
   transactions: Transaction[];
   currentMonthStr: string; // YYYY-MM
 }
 
-interface MethodStats {
+interface MethodCardConfig {
   method: PaymentMethod;
   label: string;
   icon: any;
-  colorBg: string;
-  colorBar: string;
-  totalArs: number;
-  totalUsd: number;
-  count: number;
-  percentage: number;
+  bgColor: string;
 }
 
-const METHODS_CONFIG: {
-  method: PaymentMethod;
-  label: string;
-  icon: any;
-  colorBg: string;
-  colorBar: string;
-}[] = [
+const METHODS: MethodCardConfig[] = [
   {
     method: 'transferencia',
-    label: 'Transferencia',
+    label: 'Transferencia / MP',
     icon: ArrowLeftRight,
-    colorBg: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    colorBar: 'bg-emerald-500',
+    bgColor: 'bg-[#60A5FA]', // azul cobalto
   },
   {
     method: 'tarjeta_debito',
-    label: 'Tarjeta Débito',
+    label: 'Débito',
     icon: CreditCard,
-    colorBg: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    colorBar: 'bg-blue-500',
-  },
-  {
-    method: 'tarjeta_credito',
-    label: 'Tarjeta Crédito',
-    icon: CreditCard,
-    colorBg: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-    colorBar: 'bg-purple-500',
+    bgColor: 'bg-[#FB923C]', // naranja pastel / terracota
   },
   {
     method: 'efectivo',
     label: 'Efectivo',
     icon: Banknote,
-    colorBg: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    colorBar: 'bg-amber-500',
+    bgColor: 'bg-[#FEF08A]', // amarillo pálido
+  },
+  {
+    method: 'tarjeta_credito',
+    label: 'Crédito',
+    icon: CreditCard,
+    bgColor: 'bg-[#C084FC]', // lila pastel
   },
 ];
 
@@ -71,7 +56,7 @@ export function PaymentMethodBreakdown({
   );
 
   const totalExpenseArs = monthExpenses
-    .filter(t => t.currency === 'ARS')
+    .filter(t => (t.currency || 'ARS') === 'ARS')
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const totalExpenseUsd = monthExpenses
@@ -80,59 +65,35 @@ export function PaymentMethodBreakdown({
 
   const activeTotal = selectedCurrency === 'ARS' ? totalExpenseArs : totalExpenseUsd;
 
-  const stats: MethodStats[] = METHODS_CONFIG.map(cfg => {
-    const txs = monthExpenses.filter(t => (t.payment_method || 'transferencia') === cfg.method);
-    const ars = txs
-      .filter(t => t.currency === 'ARS')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    const usd = txs
-      .filter(t => t.currency === 'USD')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-
-    const relevantAmount = selectedCurrency === 'ARS' ? ars : usd;
-    const percentage = activeTotal > 0 ? (relevantAmount / activeTotal) * 100 : 0;
-
-    return {
-      ...cfg,
-      totalArs: ars,
-      totalUsd: usd,
-      count: txs.length,
-      percentage,
-    };
-  });
-
   return (
-    <div className="rounded-2xl bg-[#121216] border border-white/10 p-5 shadow-lg">
+    <div className="bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_0px_#000] p-5 text-black">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-white/5">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-            <Wallet className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-white tracking-tight">Métodos de Pago</h3>
-            <p className="text-xs text-zinc-400">Distribución de gastos del mes</p>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b-2 border-black/10">
+        <div>
+          <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
+            [MÉTODOS DE PAGO]
+          </span>
+          <h3 className="text-base font-black tracking-tight text-black">Distribución de Gastos</h3>
         </div>
 
         {/* Currency Switcher */}
-        <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5 text-[11px]">
+        <div className="flex gap-1 bg-[#F4F1EA] p-1 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_#000]">
           <button
             onClick={() => setSelectedCurrency('ARS')}
-            className={`px-2 py-1 font-semibold rounded-md transition-all ${
+            className={`px-3 py-1 font-mono text-xs font-black rounded-lg transition-all ${
               selectedCurrency === 'ARS'
-                ? 'bg-emerald-500 text-black shadow-sm'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-[#FACC15] text-black border border-black shadow-[1px_1px_0px_0px_#000]'
+                : 'text-zinc-600 hover:text-black'
             }`}
           >
             ARS
           </button>
           <button
             onClick={() => setSelectedCurrency('USD')}
-            className={`px-2 py-1 font-semibold rounded-md transition-all ${
+            className={`px-3 py-1 font-mono text-xs font-black rounded-lg transition-all ${
               selectedCurrency === 'USD'
-                ? 'bg-emerald-500 text-black shadow-sm'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-[#FACC15] text-black border border-black shadow-[1px_1px_0px_0px_#000]'
+                : 'text-zinc-600 hover:text-black'
             }`}
           >
             USD
@@ -140,51 +101,57 @@ export function PaymentMethodBreakdown({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="mt-4 space-y-3.5">
-        {activeTotal === 0 ? (
-          <div className="py-6 text-center text-xs text-zinc-500">
-            No hay gastos registrados en {selectedCurrency} este mes.
-          </div>
-        ) : (
-          stats.map(item => {
-            const Icon = item.icon;
-            const amount = selectedCurrency === 'ARS' ? item.totalArs : item.totalUsd;
+      {/* Grid of Method Pills / Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        {METHODS.map(cfg => {
+          const Icon = cfg.icon;
+          const methodTxs = monthExpenses.filter(
+            t => (t.payment_method || 'transferencia') === cfg.method
+          );
+          const amount = methodTxs
+            .filter(t => (selectedCurrency === 'ARS' ? (t.currency || 'ARS') === 'ARS' : t.currency === 'USD'))
+            .reduce((sum, t) => sum + Number(t.amount), 0);
 
-            return (
-              <div key={item.method} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`p-1 rounded-md border text-xs flex items-center justify-center ${item.colorBg}`}
-                    >
-                      <Icon className="w-3 h-3" />
-                    </div>
-                    <span className="font-semibold text-zinc-200">{item.label}</span>
-                    <span className="text-[10px] text-zinc-400">({item.count} movs)</span>
-                  </div>
+          const pct = activeTotal > 0 ? (amount / activeTotal) * 100 : 0;
 
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-white">
-                      {formatCurrency(amount, selectedCurrency)}
-                    </span>
-                    <span className="text-[11px] font-medium text-zinc-400 w-10 text-right">
-                      {item.percentage.toFixed(0)}%
-                    </span>
+          return (
+            <div
+              key={cfg.method}
+              className={`${cfg.bgColor} border-2 border-black rounded-xl p-3.5 shadow-[2px_2px_0px_0px_#000] text-black flex flex-col justify-between`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 bg-white border-2 border-black rounded-lg flex items-center justify-center shadow-[1px_1px_0px_0px_#000]">
+                    <Icon className="w-4 h-4 text-black stroke-[2.5px]" />
                   </div>
+                  <span className="font-black text-xs tracking-tight">{cfg.label}</span>
+                </div>
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-black text-white rounded border border-black">
+                  {methodTxs.length}
+                </span>
+              </div>
+
+              <div className="mt-3">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-black font-mono tabular-nums text-black">
+                    {formatCurrency(amount, selectedCurrency)}
+                  </span>
+                  <span className="text-xs font-mono font-black text-black/80">
+                    {pct.toFixed(0)}%
+                  </span>
                 </div>
 
-                {/* Progress bar */}
-                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                {/* Progress bar inside card */}
+                <div className="w-full h-2.5 bg-black/15 border border-black rounded-full overflow-hidden mt-1.5 p-0.5">
                   <div
-                    className={`h-full ${item.colorBar} rounded-full transition-all duration-500`}
-                    style={{ width: `${Math.min(100, item.percentage)}%` }}
+                    className="h-full bg-black rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
                   />
                 </div>
               </div>
-            );
-          })
-        )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

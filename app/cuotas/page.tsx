@@ -61,10 +61,13 @@ export default function CuotasPage() {
       {/* Title & Action */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
+            [PROYECCIÓN 6 MESES]
+          </span>
+          <h2 className="text-xl md:text-2xl font-black text-black tracking-tight flex items-center gap-2">
             <span>Compromisos en Cuotas</span>
           </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs font-mono font-medium text-zinc-600 mt-0.5">
             Cronograma y proyección financiera de tarjetas de crédito
           </p>
         </div>
@@ -73,14 +76,14 @@ export default function CuotasPage() {
           <button
             onClick={loadData}
             disabled={loading}
-            className="p-2 text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all disabled:opacity-50"
+            className="p-2 text-black bg-white hover:bg-zinc-100 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px] disabled:opacity-50"
             title="Recargar"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 stroke-[2.5px] ${loading ? 'animate-spin text-[#FACC15]' : ''}`} />
           </button>
           <button
             onClick={openNewTxModal}
-            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black font-semibold text-xs py-2 px-3.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+            className="flex items-center gap-2 bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black text-xs py-2 px-3.5 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000]"
           >
             <PlusCircle className="w-4 h-4 stroke-[2.5px]" />
             <span>Nueva Compra</span>
@@ -90,40 +93,40 @@ export default function CuotasPage() {
 
       {/* KPI Commitments Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="rounded-2xl bg-[#121216] border border-purple-500/30 p-4 shadow-lg bg-gradient-to-b from-purple-950/20 to-transparent">
-          <span className="text-xs font-medium text-purple-300 flex items-center gap-1.5">
-            <CreditCard className="w-3.5 h-3.5" />
+        <div className="rounded-2xl bg-[#C084FC] border-2 border-black p-4 shadow-[3px_3px_0px_0px_#000] text-black">
+          <span className="text-xs font-mono font-black uppercase text-black flex items-center gap-1.5">
+            <CreditCard className="w-4 h-4 stroke-[2.5px]" />
             Total Comprometido (6 meses)
           </span>
           <div className="mt-2">
-            <h3 className="text-2xl font-black text-white">
+            <h3 className="text-2xl font-mono font-black tabular-nums text-black">
               {formatCurrency(totalCommittedArs, 'ARS')}
             </h3>
             {totalCommittedUsd > 0 && (
-              <p className="text-xs font-bold text-emerald-400 mt-0.5">
+              <p className="text-xs font-mono font-bold text-emerald-900 mt-0.5">
                 + {formatCurrency(totalCommittedUsd, 'USD')}
               </p>
             )}
           </div>
         </div>
 
-        <div className="rounded-2xl bg-[#121216] border border-white/10 p-4 shadow-lg">
-          <span className="text-xs font-medium text-zinc-400">Cuotas Activas</span>
+        <div className="rounded-2xl bg-white border-2 border-black p-4 shadow-[3px_3px_0px_0px_#000] text-black">
+          <span className="text-xs font-mono font-bold uppercase text-zinc-600">Cuotas Activas</span>
           <div className="mt-2">
-            <h3 className="text-2xl font-black text-white">{installmentTxs.length}</h3>
-            <p className="text-[11px] text-zinc-400 mt-0.5">
+            <h3 className="text-2xl font-mono font-black tabular-nums text-black">{installmentTxs.length}</h3>
+            <p className="text-[11px] font-mono font-medium text-zinc-600 mt-0.5">
               pagos distribuidos en los próximos 180 días
             </p>
           </div>
         </div>
 
-        <div className="rounded-2xl bg-[#121216] border border-white/10 p-4 shadow-lg flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-sky-500/10 text-sky-400 shrink-0">
-            <CalendarClock className="w-5 h-5" />
+        <div className="rounded-2xl bg-white border-2 border-black p-4 shadow-[3px_3px_0px_0px_#000] flex items-center gap-3 text-black">
+          <div className="p-3 rounded-xl bg-[#60A5FA] border-2 border-black text-black shadow-[1px_1px_0px_0px_#000] shrink-0">
+            <CalendarClock className="w-5 h-5 stroke-[2.5px]" />
           </div>
           <div className="text-xs">
-            <p className="font-semibold text-white">Automatización de cuotas</p>
-            <p className="text-zinc-400 mt-0.5 text-[11px]">
+            <p className="font-bold text-black">Automatización de cuotas</p>
+            <p className="text-zinc-600 font-mono mt-0.5 text-[11px]">
               Al ingresar una compra con cuotas, el sistema distribuye automáticamente el gasto mes a mes.
             </p>
           </div>
@@ -135,7 +138,7 @@ export default function CuotasPage() {
 
       {/* Itemized monthly breakdown */}
       <div className="pt-2">
-        <h3 className="text-sm font-bold text-white tracking-tight mb-3">
+        <h3 className="text-base font-black text-black tracking-tight mb-3">
           Detalle Mes a Mes
         </h3>
         <MonthlyInstallments transactions={transactions} baseDate={baseDate} />
