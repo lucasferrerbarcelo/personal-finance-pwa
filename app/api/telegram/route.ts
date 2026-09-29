@@ -392,42 +392,60 @@ export async function POST(req: NextRequest) {
         let installmentCycles: StatementCycleInfo[] | undefined;
 
         if (newMethod === 'tarjeta_credito') {
-          const card = await getDefaultCreditCard(supabase);
-          const totalInst = tx.installment_total || 1;
+          let closing_day = 24;
+          let due_day = 5;
+          let cardId: string | null = null;
+
+          if (supabase) {
+            const { data: cards, error: cardErr } = await supabase
+              .from('credit_cards')
+              .select('id, closing_day, due_day')
+              .limit(1);
+
+            if (cardErr) {
+              console.warn('[Telegram Webhook] Error fetching credit_cards in callback:', cardErr);
+            }
+
+            const card = cards?.[0];
+            cardId = card ? card.id : null;
+            closing_day = card?.closing_day || 24;
+            due_day = card?.due_day || 5;
+          }
+
+          const totalInst = tx.total_installments || tx.installment_total || 1;
           const txDate = tx.date || today;
 
           installmentCycles = calculateInstallmentStatementCycles(
             txDate,
             totalInst,
-            card.closing_day,
-            card.due_day
+            closing_day,
+            due_day
           );
           creditCycle = installmentCycles[0];
 
           await supabase.from('transactions').update({
             payment_method: newMethod,
             statement_month: creditCycle.statementMonth,
-            statement_paid: false,
-            card_id: card.id,
+            credit_card_id: cardId || null,
           } as any).eq('id', txId);
 
-          if (tx.parent_transaction_id || tx.installment_total) {
+          if (tx.parent_transaction_id || tx.installment_total || tx.total_installments) {
             const parentId = tx.parent_transaction_id || txId;
             const { data: siblings } = await supabase
               .from('transactions')
-              .select('id, installment_current')
+              .select('id, installment_current, current_installment')
               .or(`id.eq.${parentId},parent_transaction_id.eq.${parentId}`)
               .order('installment_current', { ascending: true });
 
             if (siblings && siblings.length > 0) {
               for (const sib of siblings) {
-                const idx = Math.max(0, (sib.installment_current || 1) - 1);
+                const currentInst = sib.current_installment || sib.installment_current || 1;
+                const idx = Math.max(0, currentInst - 1);
                 const sibCycle = installmentCycles[idx] || creditCycle;
                 await supabase.from('transactions').update({
                   payment_method: newMethod,
                   statement_month: sibCycle.statementMonth,
-                  statement_paid: false,
-                  card_id: card.id,
+                  credit_card_id: cardId || null,
                 } as any).eq('id', sib.id);
               }
             }
@@ -437,8 +455,7 @@ export async function POST(req: NextRequest) {
           await supabase.from('transactions').update({
             payment_method: newMethod,
             statement_month: null,
-            statement_paid: null,
-            card_id: null,
+            credit_card_id: null,
           } as any).eq('id', txId);
 
           if (tx.parent_transaction_id) {
@@ -447,8 +464,7 @@ export async function POST(req: NextRequest) {
               .update({
                 payment_method: newMethod,
                 statement_month: null,
-                statement_paid: null,
-                card_id: null,
+                credit_card_id: null,
               } as any)
               .eq('parent_transaction_id', tx.parent_transaction_id);
           } else {
@@ -457,8 +473,7 @@ export async function POST(req: NextRequest) {
               .update({
                 payment_method: newMethod,
                 statement_month: null,
-                statement_paid: null,
-                card_id: null,
+                credit_card_id: null,
               } as any)
               .eq('parent_transaction_id', txId);
           }
@@ -601,59 +616,77 @@ export async function POST(req: NextRequest) {
         }
 
         const { amount, currency, concept, payment_method, category_id, category_name, installments } = parsedVoice;
-        const perInstallment = Number((amount / installments).toFixed(2));
-        const dates = calculateInstallmentDates(today, installments);
+        const totalInstallments = installments && installments > 1 ? installments : 1;
+        const perInstallment = Number((amount / totalInstallments).toFixed(2));
+        const dates = calculateInstallmentDates(today, totalInstallments);
 
-        const parentId = crypto.randomUUID();
+        const parentId = totalInstallments > 1 ? crypto.randomUUID() : null;
         const singleTxId = crypto.randomUUID();
-        const primaryId = installments > 1 ? parentId : singleTxId;
+        const primaryId = totalInstallments > 1 ? parentId! : singleTxId;
 
         let creditCycle: StatementCycleInfo | undefined;
         let installmentCycles: StatementCycleInfo[] | undefined;
         let cardId: string | null = null;
 
         if (payment_method === 'tarjeta_credito') {
-          const card = await getDefaultCreditCard(supabase);
-          cardId = card.id;
+          let closing_day = 24;
+          let due_day = 5;
+
+          if (supabase) {
+            const { data: cards, error: cardErr } = await supabase
+              .from('credit_cards')
+              .select('id, closing_day, due_day')
+              .limit(1);
+
+            if (cardErr) {
+              console.warn('[Telegram Webhook] Error fetching credit_cards in voice:', cardErr);
+            }
+
+            const card = cards?.[0];
+            cardId = card ? card.id : null;
+            closing_day = card?.closing_day || 24;
+            due_day = card?.due_day || 5;
+          }
+
           installmentCycles = calculateInstallmentStatementCycles(
             today,
-            installments,
-            card.closing_day,
-            card.due_day
+            totalInstallments,
+            closing_day,
+            due_day
           );
           creditCycle = installmentCycles[0];
         }
 
         if (supabase) {
           const recordsToInsert = [];
-          for (let i = 0; i < installments; i++) {
-            const installmentNote = installments > 1 ? `${concept} (Cuota ${i + 1}/${installments})` : concept;
+          for (let i = 0; i < totalInstallments; i++) {
+            const installmentNote = totalInstallments > 1 ? `${concept} (Cuota ${i + 1}/${totalInstallments})` : concept;
             const stmtMonth = payment_method === 'tarjeta_credito' && installmentCycles?.[i]
-              ? installmentCycles[i].statementMonth
+              ? String(installmentCycles[i].statementMonth)
               : null;
-            const stmtPaid = payment_method === 'tarjeta_credito' ? false : null;
 
             recordsToInsert.push({
-              id: installments > 1 ? (i === 0 ? parentId : crypto.randomUUID()) : singleTxId,
+              id: totalInstallments > 1 ? (i === 0 ? parentId! : crypto.randomUUID()) : singleTxId,
               type: 'expense' as const,
               amount: perInstallment,
               currency,
-              category_id,
-              date: dates[i],
+              category_id: category_id || null,
+              date: dates[i] || today,
               note: installmentNote,
               payment_method,
-              installment_current: installments > 1 ? i + 1 : null,
-              installment_total: installments > 1 ? installments : null,
-              parent_transaction_id: installments > 1 ? parentId : null,
+              credit_card_id: payment_method === 'tarjeta_credito' ? (cardId || null) : null,
               statement_month: stmtMonth,
-              statement_paid: stmtPaid,
-              card_id: payment_method === 'tarjeta_credito' ? cardId : null,
+              total_installments: totalInstallments,
+              current_installment: i + 1,
+              installment_total: totalInstallments,
+              installment_current: i + 1,
+              parent_transaction_id: totalInstallments > 1 ? parentId : null,
             });
           }
 
-          const { error: insErr } = await supabase.from('transactions').insert(recordsToInsert as any);
+          const { data, error: insErr } = await supabase.from('transactions').insert(recordsToInsert as any).select();
           if (insErr) {
-            console.error('[Telegram Webhook] Error inserting voice transaction:', insErr);
+            console.error("Error guardando gasto de voz de tarjeta de crédito:", insErr);
             await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${insErr.message}`);
             return NextResponse.json({ ok: true });
           }
@@ -771,28 +804,49 @@ export async function POST(req: NextRequest) {
         let creditCycle: StatementCycleInfo | undefined;
         let cardId: string | null = null;
         if (payment_method === 'tarjeta_credito') {
-          const card = await getDefaultCreditCard(supabase);
-          cardId = card.id;
-          creditCycle = calculateStatementCycle(today, card.closing_day, card.due_day);
+          let closing_day = 24;
+          let due_day = 5;
+
+          if (supabase) {
+            const { data: cards, error: cardsError } = await supabase
+              .from('credit_cards')
+              .select('id, closing_day, due_day')
+              .limit(1);
+
+            if (cardsError) {
+              console.warn('[Telegram Webhook] Error fetching credit_cards in photo:', cardsError);
+            }
+
+            const card = cards?.[0];
+            cardId = card ? card.id : null;
+            closing_day = card?.closing_day || 24;
+            due_day = card?.due_day || 5;
+          }
+
+          creditCycle = calculateStatementCycle(today, closing_day, due_day);
         }
 
         if (supabase) {
-          const { error: insErr } = await supabase.from('transactions').insert({
+          const payload = {
             id: txId,
             type: 'expense',
             amount,
             currency,
-            category_id,
+            category_id: category_id || null,
             date: today,
             note: concept,
             payment_method,
-            statement_month: creditCycle ? creditCycle.statementMonth : null,
-            statement_paid: creditCycle ? false : null,
-            card_id: creditCycle ? cardId : null,
-          } as any);
+            credit_card_id: payment_method === 'tarjeta_credito' ? (cardId || null) : null,
+            statement_month: creditCycle ? String(creditCycle.statementMonth) : null,
+            total_installments: 1,
+            current_installment: 1,
+            installment_total: 1,
+            installment_current: 1,
+          };
 
+          const { data, error: insErr } = await supabase.from('transactions').insert([payload] as any).select();
           if (insErr) {
-            console.error('[Telegram Webhook] Error inserting receipt transaction:', insErr);
+            console.error("Error guardando comprobante en base de datos:", insErr);
             await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${insErr.message}`);
             return NextResponse.json({ ok: true });
           }
@@ -861,8 +915,9 @@ export async function POST(req: NextRequest) {
 
       case 'EXPENSE': {
         const { amount, currency, note, installments, paymentMethod } = command;
-        const perInstallment = Number((amount / installments).toFixed(2));
-        const dates = calculateInstallmentDates(today, installments);
+        const totalInstallments = installments && installments > 1 ? installments : 1;
+        const perInstallment = Number((amount / totalInstallments).toFixed(2));
+        const dates = calculateInstallmentDates(today, totalInstallments);
 
         const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod] || '📲 Transf / MP';
 
@@ -871,58 +926,79 @@ export async function POST(req: NextRequest) {
         const categoryId = matchedCategory?.id || null;
         const categoryName = matchedCategory?.name || 'General';
 
-        const parentId = crypto.randomUUID();
+        const parentId = totalInstallments > 1 ? crypto.randomUUID() : null;
         const singleTxId = crypto.randomUUID();
-        const primaryId = installments > 1 ? parentId : singleTxId;
+        const primaryId = totalInstallments > 1 ? parentId! : singleTxId;
 
         let creditCycle: StatementCycleInfo | undefined;
         let installmentCycles: StatementCycleInfo[] | undefined;
         let cardId: string | null = null;
 
         if (paymentMethod === 'tarjeta_credito') {
-          const card = await getDefaultCreditCard(supabase);
-          cardId = card.id;
+          let closing_day = 24;
+          let due_day = 5;
+
+          if (supabase) {
+            // 1. Depuración y Fallback de credit_card_id
+            const { data: cards, error: cardErr } = await supabase
+              .from('credit_cards')
+              .select('id, closing_day, due_day')
+              .limit(1);
+
+            if (cardErr) {
+              console.warn('[Telegram Webhook] Error fetching credit_cards:', cardErr);
+            }
+
+            const card = cards?.[0];
+            cardId = card ? card.id : null;
+
+            // 2. Cálculo seguro de statement_month
+            closing_day = card?.closing_day || 24;
+            due_day = card?.due_day || 5;
+          }
+
           installmentCycles = calculateInstallmentStatementCycles(
             today,
-            installments,
-            card.closing_day,
-            card.due_day
+            totalInstallments,
+            closing_day,
+            due_day
           );
           creditCycle = installmentCycles[0];
         }
 
         if (supabase) {
           const recordsToInsert = [];
-          for (let i = 0; i < installments; i++) {
-            const installmentNote = installments > 1 ? `${note} (Cuota ${i + 1}/${installments})` : note;
+          for (let i = 0; i < totalInstallments; i++) {
+            const installmentNote = totalInstallments > 1 ? `${note} (Cuota ${i + 1}/${totalInstallments})` : note;
             const stmtMonth = paymentMethod === 'tarjeta_credito' && installmentCycles?.[i]
-              ? installmentCycles[i].statementMonth
+              ? String(installmentCycles[i].statementMonth)
               : null;
-            const stmtPaid = paymentMethod === 'tarjeta_credito' ? false : null;
 
             recordsToInsert.push({
-              id: installments > 1 ? (i === 0 ? parentId : crypto.randomUUID()) : singleTxId,
+              id: totalInstallments > 1 ? (i === 0 ? parentId! : crypto.randomUUID()) : singleTxId,
               type: 'expense' as const,
               amount: perInstallment,
               currency,
               category_id: categoryId,
-              date: dates[i],
+              date: dates[i] || today,
               note: installmentNote,
-              payment_method: paymentMethod,
-              installment_current: installments > 1 ? i + 1 : null,
-              installment_total: installments > 1 ? installments : null,
-              parent_transaction_id: installments > 1 ? parentId : null,
+              payment_method: paymentMethod, // 'tarjeta_credito'
+              credit_card_id: paymentMethod === 'tarjeta_credito' ? (cardId || null) : null,
               statement_month: stmtMonth,
-              statement_paid: stmtPaid,
-              card_id: paymentMethod === 'tarjeta_credito' ? cardId : null,
+              total_installments: totalInstallments, // entero (default 1)
+              current_installment: i + 1, // entero (default 1)
+              installment_total: totalInstallments,
+              installment_current: i + 1,
+              parent_transaction_id: totalInstallments > 1 ? parentId : null,
             });
           }
 
-          const { error } = await supabase.from('transactions').insert(recordsToInsert as any);
+          // 3. Manejo de error explícito en el insert
+          const { data, error } = await supabase.from('transactions').insert(recordsToInsert as any).select();
           if (error) {
-            console.error('[Telegram Webhook] Error inserting transaction:', error);
+            console.error("Error guardando gasto de tarjeta de crédito:", error);
             await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${error.message}`);
-            break;
+            return NextResponse.json({ ok: true });
           }
         }
 

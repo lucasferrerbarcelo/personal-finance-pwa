@@ -103,13 +103,27 @@ export async function createTransaction(params: CreateTransactionParams): Promis
   let statementCycles: { statementMonth: string }[] = [];
   let cardId: string | null = null;
   if (paymentMethod === 'tarjeta_credito') {
-    const card = await getDefaultCreditCard(supabase);
-    cardId = params.card_id || card.id;
+    let closing_day = 24;
+    let due_day = 5;
+
+    if (supabase) {
+      const { data: cards, error: cardsError } = await supabase
+        .from('credit_cards')
+        .select('id, closing_day, due_day')
+        .limit(1);
+
+      if (!cardsError && cards && cards.length > 0) {
+        cardId = cards[0].id;
+        closing_day = cards[0].closing_day || 24;
+        due_day = cards[0].due_day || 5;
+      }
+    }
+
     statementCycles = calculateInstallmentStatementCycles(
       params.date,
       installments,
-      card.closing_day,
-      card.due_day
+      closing_day,
+      due_day
     );
   }
 
@@ -119,9 +133,8 @@ export async function createTransaction(params: CreateTransactionParams): Promis
     const noteSuffix = installments > 1 ? ` (Cuota ${i + 1}/${installments})` : '';
     const cleanNote = params.note ? `${params.note}${noteSuffix}` : (installments > 1 ? `Cuota ${i + 1}/${installments}` : '');
     const stmtMonth = paymentMethod === 'tarjeta_credito' && statementCycles[i]
-      ? statementCycles[i].statementMonth
+      ? String(statementCycles[i].statementMonth)
       : (params.statement_month || null);
-    const stmtPaid = paymentMethod === 'tarjeta_credito' ? false : null;
 
     const record: Transaction = {
       id: installments > 1 && i === 0 ? parentId! : `tx-${Date.now()}-${i}`,
@@ -132,12 +145,13 @@ export async function createTransaction(params: CreateTransactionParams): Promis
       date: dates[i],
       note: cleanNote,
       payment_method: paymentMethod,
+      credit_card_id: paymentMethod === 'tarjeta_credito' ? (cardId || null) : null,
+      statement_month: stmtMonth,
+      total_installments: installments,
+      current_installment: i + 1,
       installment_current: installments > 1 ? i + 1 : null,
       installment_total: installments > 1 ? installments : null,
       parent_transaction_id: installments > 1 ? parentId : null,
-      statement_month: stmtMonth,
-      statement_paid: stmtPaid,
-      card_id: paymentMethod === 'tarjeta_credito' ? cardId : null,
       created_at: new Date().toISOString(),
     };
 
@@ -156,12 +170,13 @@ export async function createTransaction(params: CreateTransactionParams): Promis
           date: r.date,
           note: r.note,
           payment_method: r.payment_method,
+          credit_card_id: r.credit_card_id || null,
+          statement_month: r.statement_month || null,
+          total_installments: r.total_installments || 1,
+          current_installment: r.current_installment || 1,
           installment_current: r.installment_current,
           installment_total: r.installment_total,
           parent_transaction_id: r.parent_transaction_id,
-          statement_month: r.statement_month,
-          statement_paid: r.statement_paid,
-          card_id: r.card_id,
         }))
       )
       .select('*, category:categories(*)');
@@ -182,17 +197,35 @@ export async function updateTransaction(
 ): Promise<boolean> {
   const updatedParams = { ...params };
   if (updatedParams.payment_method === 'tarjeta_credito' && !updatedParams.statement_month) {
-    const card = await getDefaultCreditCard(supabase);
+    let closing_day = 24;
+    let due_day = 5;
+    let cardId: string | null = null;
+
+    if (supabase) {
+      const { data: cards } = await supabase
+        .from('credit_cards')
+        .select('id, closing_day, due_day')
+        .limit(1);
+
+      if (cards && cards.length > 0) {
+        cardId = cards[0].id;
+        closing_day = cards[0].closing_day || 24;
+        due_day = cards[0].due_day || 5;
+      }
+    }
+
     const dateToUse = updatedParams.date || getCurrentDateISO();
-    const cycle = calculateInstallmentStatementCycles(dateToUse, 1, card.closing_day, card.due_day)[0];
+    const cycle = calculateInstallmentStatementCycles(dateToUse, 1, closing_day, due_day)[0];
     updatedParams.statement_month = cycle.statementMonth;
-    updatedParams.statement_paid = false;
-    updatedParams.card_id = updatedParams.card_id || card.id;
+    updatedParams.credit_card_id = cardId || null;
   } else if (updatedParams.payment_method && updatedParams.payment_method !== 'tarjeta_credito') {
     updatedParams.statement_month = null;
-    updatedParams.statement_paid = null;
-    updatedParams.card_id = null;
+    updatedParams.credit_card_id = null;
   }
+
+  // Clean out properties not in DB schema
+  delete (updatedParams as any).card_id;
+  delete (updatedParams as any).statement_paid;
 
   if (supabase) {
     const { error } = await supabase.from('transactions').update(updatedParams).eq('id', id);

@@ -159,12 +159,16 @@ export async function markStatementAsPaid(
 
   if (sb) {
     try {
-      // 1. Mark existing credit transactions as paid
-      await sb
-        .from('transactions')
-        .update({ statement_paid: true })
-        .eq('statement_month', statementMonth)
-        .eq('payment_method', 'tarjeta_credito');
+      // 1. Mark existing credit transactions as paid (if column exists)
+      try {
+        await sb
+          .from('transactions')
+          .update({ statement_paid: true })
+          .eq('statement_month', statementMonth)
+          .eq('payment_method', 'tarjeta_credito');
+      } catch (errUpdate) {
+        // Ignored if column does not exist
+      }
 
       // 2. Insert cash expense
       const { data: newTx, error: insErr } = await sb
@@ -176,6 +180,10 @@ export async function markStatementAsPaid(
           date: today,
           note,
           payment_method: 'transferencia',
+          total_installments: 1,
+          current_installment: 1,
+          installment_total: 1,
+          installment_current: 1,
         })
         .select()
         .single();

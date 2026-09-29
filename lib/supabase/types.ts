@@ -37,6 +37,9 @@ export interface Transaction {
   statement_month?: string | null; // 'YYYY-MM'
   statement_paid?: boolean | null;
   card_id?: string | null;
+  credit_card_id?: string | null;
+  total_installments?: number | null;
+  current_installment?: number | null;
   created_at: string;
   category?: Category | null;
 }

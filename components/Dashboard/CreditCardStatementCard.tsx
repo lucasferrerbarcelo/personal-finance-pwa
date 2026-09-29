@@ -36,12 +36,35 @@ export function CreditCardStatementCard({
     return calculateStatementCycle(todayIso, closingDay, dueDay);
   }, [todayIso, closingDay, dueDay]);
 
+  // Months marked as paid via statement_paid flag or cash payment transaction
+  const paidMonthsSet = useMemo(() => {
+    const set = new Set<string>();
+    transactions.forEach(t => {
+      if (t.statement_paid && t.statement_month) {
+        set.add(t.statement_month);
+      }
+      if (t.note && t.note.startsWith('Pago Resumen Tarjeta Crédito - ')) {
+        const monthPart = t.note.replace('Pago Resumen Tarjeta Crédito - ', '').trim();
+        transactions.forEach(ot => {
+          if (ot.statement_month && formatStatementMonthName(ot.statement_month) === monthPart) {
+            set.add(ot.statement_month);
+          }
+        });
+      }
+    });
+    return set;
+  }, [transactions]);
+
   // Unpaid credit card transactions
   const unpaidCreditTransactions = useMemo(() => {
     return transactions.filter(
-      t => t.payment_method === 'tarjeta_credito' && !t.statement_paid && t.type === 'expense'
+      t =>
+        t.payment_method === 'tarjeta_credito' &&
+        t.type === 'expense' &&
+        !t.statement_paid &&
+        (!t.statement_month || !paidMonthsSet.has(t.statement_month))
     );
-  }, [transactions]);
+  }, [transactions, paidMonthsSet]);
 
   // Distinct unpaid statement months sorted ascending
   const unpaidMonths = useMemo(() => {
