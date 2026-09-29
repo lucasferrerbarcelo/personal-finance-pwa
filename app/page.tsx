@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Transaction, DebtSummary } from '@/lib/supabase/types';
 import { fetchTransactions, fetchDebts } from '@/lib/supabase/client';
 import { KpiCards } from '@/components/Dashboard/KpiCards';
+import { MonthlyBudgetCard } from '@/components/Dashboard/MonthlyBudgetCard';
 import { CategoryDonutChart } from '@/components/Dashboard/CategoryDonutChart';
 import { PaymentMethodBreakdown } from '@/components/Dashboard/PaymentMethodBreakdown';
 import { InstallmentSnapshot } from '@/components/Dashboard/InstallmentSnapshot';
@@ -76,6 +77,13 @@ export default function DashboardPage() {
         transactions={transactions}
         debts={debts}
         currentMonthStr={currentMonthStr}
+      />
+
+      {/* Monthly Budget Card */}
+      <MonthlyBudgetCard
+        transactions={transactions}
+        currentMonthStr={currentMonthStr}
+        onRefresh={triggerRefresh}
       />
 
       {/* Grid: Category Donut, Payment Method Breakdown & Installments Snapshot */}

@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { Database, Category, Transaction, DebtSummary, DebtPayment, Debt, DebtType, Currency, TransactionType, PaymentMethod } from './types';
+import { Database, Category, Transaction, DebtSummary, DebtPayment, Debt, DebtType, Currency, TransactionType, PaymentMethod, Budget } from './types';
 import { INITIAL_CATEGORIES, INITIAL_TRANSACTIONS, INITIAL_DEBTS } from '../mockData';
 import { calculateInstallmentDates, getCurrentDateISO } from '../utils';
 
@@ -353,4 +353,81 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
   }
 
   return { payment, debt: resultDebt };
+}
+
+export async function fetchMonthlyBudget(monthStr: string, currency: Currency = 'ARS'): Promise<Budget | null> {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('budgets')
+      .select('*')
+      .eq('month', monthStr)
+      .maybeSingle();
+
+    if (!error && data) {
+      return {
+        id: data.id,
+        month: data.month,
+        amount: Number(data.amount),
+        currency: data.currency || currency,
+        created_at: data.created_at,
+      };
+    }
+  }
+
+  return getLocalItem<Budget | null>(`pf_budget_${monthStr}`, null);
+}
+
+export async function saveMonthlyBudget(monthStr: string, amount: number, currency: Currency = 'ARS'): Promise<Budget> {
+  if (supabase) {
+    const { data: existing } = await supabase
+      .from('budgets')
+      .select('id')
+      .eq('month', monthStr)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { data, error } = await supabase
+        .from('budgets')
+        .update({ amount, currency })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          month: data.month,
+          amount: Number(data.amount),
+          currency: data.currency,
+          created_at: data.created_at,
+        };
+      }
+    } else {
+      const { data, error } = await supabase
+        .from('budgets')
+        .insert({ month: monthStr, amount, currency })
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          month: data.month,
+          amount: Number(data.amount),
+          currency: data.currency,
+          created_at: data.created_at,
+        };
+      }
+    }
+  }
+
+  const fallback: Budget = {
+    id: `budget-${Date.now()}`,
+    month: monthStr,
+    amount,
+    currency,
+    created_at: new Date().toISOString(),
+  };
+  setLocalItem(`pf_budget_${monthStr}`, fallback);
+  return fallback;
 }

@@ -32,6 +32,16 @@ export type ParsedTelegramCommand =
       type: 'SUMMARY';
     }
   | {
+      type: 'TODAY';
+    }
+  | {
+      type: 'WEEK';
+    }
+  | {
+      type: 'SET_BUDGET';
+      amount: number;
+    }
+  | {
       type: 'HELP';
     }
   | {
@@ -71,6 +81,18 @@ export function extractPaymentMethod(text: string): {
   return { method: 'transferencia', cleaned: clean(text), hasExplicitMethod: false };
 }
 
+function parseAmountNumber(val: string): number {
+  let cleanVal = val.trim();
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(cleanVal)) {
+    cleanVal = cleanVal.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(cleanVal)) {
+    cleanVal = cleanVal.replace(/,/g, '');
+  } else {
+    cleanVal = cleanVal.replace(',', '.');
+  }
+  return parseFloat(cleanVal) || 0;
+}
+
 /**
  * Parses user message into a structured financial command
  */
@@ -79,16 +101,36 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
   const lower = trimmed.toLowerCase();
 
   // 1. Help & Start
-  if (['/start', '/help', 'ayuda', 'help'].includes(lower)) {
+  if (['/start', '/help', 'ayuda', 'help', '/comandos'].includes(lower)) {
     return { type: 'HELP' };
   }
 
-  // 2. Summary
-  if (['/resumen', 'resumen', '/status', 'resumen del mes'].includes(lower)) {
+  // 2. Today's expenses: "/hoy", "hoy", "gastos hoy", "gastos de hoy"
+  if (['/hoy', 'hoy', '/gastoshoy', 'gastos hoy', 'gastos de hoy'].includes(lower)) {
+    return { type: 'TODAY' };
+  }
+
+  // 3. Week's expenses: "/semana", "semana", "esta semana", "gastos semana"
+  if (['/semana', 'semana', '/semanal', 'esta semana', 'gastos semana', 'gastos de la semana'].includes(lower)) {
+    return { type: 'WEEK' };
+  }
+
+  // 4. Set budget: "/setpresupuesto 600000", "/setpresupuesto $600.000", "/presupuesto 600000"
+  const setBudgetRegex = /^(?:\/setpresupuesto|setpresupuesto|\/presupuesto)\s+\$?\s*([\d.,]+)$/i;
+  const setBudgetMatch = trimmed.match(setBudgetRegex);
+  if (setBudgetMatch) {
+    const amount = parseAmountNumber(setBudgetMatch[1]);
+    if (amount > 0) {
+      return { type: 'SET_BUDGET', amount };
+    }
+  }
+
+  // 5. Month Summary: "/mes", "mes", "/resumen", "resumen", "/status", "resumen del mes", "/presupuesto"
+  if (['/mes', 'mes', '/resumen', 'resumen', '/status', 'resumen del mes', 'este mes', 'gastos del mes', '/presupuesto', 'presupuesto'].includes(lower)) {
     return { type: 'SUMMARY' };
   }
 
-  // 3. Debts list: "/deudas", "deudas", "/misdeudas"
+  // 6. Debts list: "/deudas", "deudas", "/misdeudas"
   if (['/deudas', 'deudas', '/misdeudas'].includes(lower)) {
     return { type: 'DEBTS_SUMMARY' };
   }

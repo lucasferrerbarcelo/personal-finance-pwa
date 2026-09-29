@@ -14,6 +14,7 @@ import { INITIAL_CATEGORIES } from '@/lib/mockData';
 import { findBestCategory } from '@/lib/categories/matcher';
 import { processVoiceNoteWithGemini } from '@/lib/gemini/voice';
 import { processReceiptImageWithGemini } from '@/lib/gemini/receipt';
+import { getMonthlyBudget, getMonthlySpent, setMonthlyBudget } from '@/lib/budgets/service';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,6 +120,44 @@ function formatExpenseMessage(params: {
     `📂 *Categoría:* ${categoryName}\n` +
     `💳 *Método:* ${methodLabel}`
   );
+}
+
+async function getBudgetAlertFooter(
+  addedAmount: number,
+  currency: 'ARS' | 'USD',
+  monthStr: string,
+  supabase: any
+): Promise<string> {
+  if (!supabase || currency !== 'ARS') return '';
+
+  try {
+    const budget = await getMonthlyBudget(monthStr, 'ARS', supabase);
+    if (!budget || !budget.amount || Number(budget.amount) <= 0) {
+      return '';
+    }
+
+    const budgetAmount = Number(budget.amount);
+    const { total: totalSpentNow } = await getMonthlySpent(monthStr, 'ARS', supabase);
+    const spentBefore = Math.max(0, totalSpentNow - addedAmount);
+
+    const pctBefore = (spentBefore / budgetAmount) * 100;
+    const pctNow = (totalSpentNow / budgetAmount) * 100;
+    const roundedPct = Math.round(pctNow);
+
+    let footer = `\n\n📊 *Mes:* ${formatCurrency(totalSpentNow, 'ARS')} / ${formatCurrency(budgetAmount, 'ARS')} (${roundedPct}%)`;
+
+    // Alert if crossed 100% or 80% with this expense
+    if (pctBefore < 100 && pctNow >= 100) {
+      footer += `\n🚨 *Límite mensual superado* (superaste el 100% del presupuesto)`;
+    } else if (pctBefore < 80 && pctNow >= 80) {
+      footer += `\n⚠️ *Atención: superaste el 80% del presupuesto*`;
+    }
+
+    return footer;
+  } catch (err) {
+    console.warn('[Budget Footer Error]:', err);
+    return '';
+  }
 }
 
 export async function GET() {
@@ -481,6 +520,8 @@ export async function POST(req: NextRequest) {
 
         const methodLabel = PAYMENT_METHOD_LABELS[payment_method] || '📲 Transf / MP';
         const catName = category_name || 'General';
+        const currentMonthStr = today.slice(0, 7);
+        const budgetFooter = await getBudgetAlertFooter(amount, currency, currentMonthStr, supabase);
 
         const reply = formatExpenseMessage({
           amount,
@@ -491,7 +532,7 @@ export async function POST(req: NextRequest) {
           installments,
           perInstallment,
           dates,
-        });
+        }) + budgetFooter;
 
         await sendTelegramMessage(chatId, reply, {
           replyMarkup: getMainTransactionKeyboard(primaryId),
@@ -605,6 +646,8 @@ export async function POST(req: NextRequest) {
 
         const methodLabel = PAYMENT_METHOD_LABELS[payment_method] || '📲 Transf / MP';
         const catName = category_name || 'General';
+        const currentMonthStr = today.slice(0, 7);
+        const budgetFooter = await getBudgetAlertFooter(amount, currency, currentMonthStr, supabase);
 
         const reply = formatExpenseMessage({
           amount,
@@ -613,7 +656,7 @@ export async function POST(req: NextRequest) {
           categoryName: catName,
           methodLabel,
           isReceipt: true,
-        });
+        }) + budgetFooter;
 
         await sendTelegramMessage(chatId, reply, {
           replyMarkup: getMainTransactionKeyboard(txId),
@@ -646,12 +689,17 @@ export async function POST(req: NextRequest) {
           `• \`3500 cafe efectivo\` 👉 Registra gasto directamente en efectivo\n` +
           `• \`12000 nafta debito\` 👉 Registra gasto con tarjeta de débito\n` +
           `• \`60000 zapatillas 3 cuotas credito\` 👉 Compra en cuotas con tarjeta de crédito\n` +
-          `• \`25 usd hosting\` 👉 Registra gasto en USD\n` +
+          `• \`25 usd hosting\` 👉 Registra gasto en USD\n\n` +
+          `🔍 *Consultas Rápidas y Presupuesto:*\n` +
+          `• \`/hoy\` 👉 Gastos del día de hoy\n` +
+          `• \`/semana\` 👉 Gastos de los últimos 7 días\n` +
+          `• \`/mes\` 👉 Resumen mensual con Top 3 categorías y presupuesto\n` +
+          `• \`/setpresupuesto <monto>\` 👉 Fijar presupuesto mensual (ej: \`/setpresupuesto 600000\`)\n\n` +
+          `📋 *Deudas y Préstamos:*\n` +
           `• \`debo 50000 mecanico\` 👉 Registra deuda que vos debés\n` +
           `• \`me debe 20000 juan\` 👉 Registra dinero que te deben\n` +
           `• \`pago 10000 deuda juan\` 👉 Registra pago y te dice cuánto resta\n` +
-          `• \`/deudas\` 👉 Muestra el estado de todas tus deudas activas\n` +
-          `• \`/resumen\` 👉 Muestra el total gastado en el mes (ARS y USD)`;
+          `• \`/deudas\` 👉 Muestra el estado de todas tus deudas activas`;
         await sendTelegramMessage(chatId, helpMessage);
         break;
       }
@@ -699,6 +747,9 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        const currentMonthStr = today.slice(0, 7);
+        const budgetFooter = await getBudgetAlertFooter(amount, currency, currentMonthStr, supabase);
+
         const reply = formatExpenseMessage({
           amount,
           currency,
@@ -708,7 +759,7 @@ export async function POST(req: NextRequest) {
           installments,
           perInstallment,
           dates,
-        });
+        }) + budgetFooter;
 
         // Interactive Keyboard with Payment methods, Category selector, and Undo
         await sendTelegramMessage(chatId, reply, {
@@ -908,12 +959,48 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      case 'SUMMARY': {
+      case 'TODAY': {
+        let totalArs = 0;
+        let totalUsd = 0;
+        let txCount = 0;
+
+        if (supabase) {
+          const { data: txs } = await supabase
+            .from('transactions')
+            .select('amount, currency')
+            .eq('date', today)
+            .eq('type', 'expense');
+
+          const list = (txs || []) as any[];
+          txCount = list.length;
+          for (const t of list) {
+            if (t.currency === 'USD') totalUsd += Number(t.amount);
+            else totalArs += Number(t.amount);
+          }
+        }
+
+        if (txCount === 0) {
+          await sendTelegramMessage(
+            chatId,
+            `📅 *Gastos de hoy:*\n\n¡Todavía no registraste ningún gasto hoy!`
+          );
+        } else {
+          let msg = `📅 *Gastos de hoy:* ${formatCurrency(totalArs, 'ARS')} (${txCount} movimiento${txCount === 1 ? '' : 's'})`;
+          if (totalUsd > 0) {
+            msg += `\n🇺🇸 *Total USD:* ${formatCurrency(totalUsd, 'USD')}`;
+          }
+          await sendTelegramMessage(chatId, msg);
+        }
+        break;
+      }
+
+      case 'WEEK': {
         const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const startOfMonth = `${year}-${month}-01`;
-        const endOfMonth = `${year}-${month}-31`;
+        const sevenDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+        const y = sevenDaysAgo.getFullYear();
+        const m = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+        const d = String(sevenDaysAgo.getDate()).padStart(2, '0');
+        const sevenDaysAgoIso = `${y}-${m}-${d}`;
 
         let totalArs = 0;
         let totalUsd = 0;
@@ -922,32 +1009,156 @@ export async function POST(req: NextRequest) {
         if (supabase) {
           const { data: txs } = await supabase
             .from('transactions')
-            .select('amount, currency, type')
-            .gte('date', startOfMonth)
-            .lte('date', endOfMonth)
+            .select('amount, currency')
+            .gte('date', sevenDaysAgoIso)
+            .lte('date', today)
             .eq('type', 'expense');
+
+          const list = (txs || []) as any[];
+          txCount = list.length;
+          for (const t of list) {
+            if (t.currency === 'USD') totalUsd += Number(t.amount);
+            else totalArs += Number(t.amount);
+          }
+        }
+
+        if (txCount === 0) {
+          await sendTelegramMessage(
+            chatId,
+            `📅 *Gastos de los últimos 7 días:*\n\n¡No tenés gastos registrados en este período!`
+          );
+        } else {
+          let msg = `📅 *Gastos de los últimos 7 días:*\n\n` +
+            `💸 *Total:* ${formatCurrency(totalArs, 'ARS')} (${txCount} movimiento${txCount === 1 ? '' : 's'})`;
+          if (totalUsd > 0) {
+            msg += `\n🇺🇸 *Total USD:* ${formatCurrency(totalUsd, 'USD')}`;
+          }
+          await sendTelegramMessage(chatId, msg);
+        }
+        break;
+      }
+
+      case 'SUMMARY': {
+        const now = new Date();
+        const currentMonthStr = today.slice(0, 7);
+        const startOfMonth = `${currentMonthStr}-01`;
+        const endOfMonth = `${currentMonthStr}-31`;
+
+        let expenseArs = 0;
+        let expenseUsd = 0;
+        let incomeArs = 0;
+        let incomeUsd = 0;
+        let txCount = 0;
+        const catTotals: Record<string, number> = {};
+
+        if (supabase) {
+          const { data: txs } = await supabase
+            .from('transactions')
+            .select('amount, currency, type, category:categories(name)')
+            .gte('date', startOfMonth)
+            .lte('date', endOfMonth);
 
           const txList = (txs || []) as any[];
           txCount = txList.length;
+
           for (const tx of txList) {
-            if (tx.currency === 'USD') {
-              totalUsd += Number(tx.amount);
-            } else {
-              totalArs += Number(tx.amount);
+            const amt = Number(tx.amount) || 0;
+            if (tx.type === 'expense') {
+              if (tx.currency === 'USD') {
+                expenseUsd += amt;
+              } else {
+                expenseArs += amt;
+                const catName = tx.category?.name || 'General';
+                catTotals[catName] = (catTotals[catName] || 0) + amt;
+              }
+            } else if (tx.type === 'income') {
+              if (tx.currency === 'USD') {
+                incomeUsd += amt;
+              } else {
+                incomeArs += amt;
+              }
             }
           }
         }
 
         const monthName = now.toLocaleDateString('es-ES', { month: 'long' });
         const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        const year = now.getFullYear();
 
-        const summaryMsg = `📊 *Resumen de Gastos - ${capitalizedMonth} ${year}*\n\n` +
-          `🇦🇷 *Total en ARS:* ${formatCurrency(totalArs, 'ARS')}\n` +
-          `🇺🇸 *Total en USD:* ${formatCurrency(totalUsd, 'USD')}\n` +
-          `🧾 *Total movimientos del mes:* ${txCount}\n\n` +
-          `💡 _Tip: Podés consultar el panel web para ver el gráfico interactivo por categoría y cuotas futuras._`;
+        let msg = `📊 *Resumen Mensual - ${capitalizedMonth} ${year}*\n\n` +
+          `💸 *Gastos totales:* ${formatCurrency(expenseArs, 'ARS')}`;
+        if (expenseUsd > 0) {
+          msg += ` (+ ${formatCurrency(expenseUsd, 'USD')})`;
+        }
 
-        await sendTelegramMessage(chatId, summaryMsg);
+        msg += `\n💵 *Ingresos totales:* ${formatCurrency(incomeArs, 'ARS')}`;
+        if (incomeUsd > 0) {
+          msg += ` (+ ${formatCurrency(incomeUsd, 'USD')})`;
+        }
+
+        msg += `\n🧾 *Movimientos:* ${txCount}\n`;
+
+        // Top 3 categories
+        const sortedCats = Object.entries(catTotals)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3);
+
+        if (sortedCats.length > 0) {
+          msg += `\n🏆 *Top Categorías de Gasto:*`;
+          sortedCats.forEach(([catName, amt], idx) => {
+            const pct = expenseArs > 0 ? Math.round((amt / expenseArs) * 100) : 0;
+            msg += `\n${idx + 1}. ${getCategoryEmoji(catName)} *${catName}:* ${formatCurrency(amt, 'ARS')} (${pct}%)`;
+          });
+          msg += `\n`;
+        }
+
+        // Budget check
+        if (supabase) {
+          const budget = await getMonthlyBudget(currentMonthStr, 'ARS', supabase);
+          if (budget && budget.amount > 0) {
+            const budgetAmt = Number(budget.amount);
+            const pct = Math.round((expenseArs / budgetAmt) * 100);
+            msg += `\n🎯 *Presupuesto:* ${formatCurrency(expenseArs, 'ARS')} / ${formatCurrency(budgetAmt, 'ARS')} (${pct}%)`;
+            if (pct >= 100) {
+              msg += `\n🚨 *Límite mensual superado*`;
+            } else if (pct >= 80) {
+              msg += `\n⚠️ *Atención: superaste el 80% del presupuesto*`;
+            }
+          } else {
+            msg += `\n💡 _Tip: Podés fijar un presupuesto mensual con /setpresupuesto <monto>_`;
+          }
+        }
+
+        await sendTelegramMessage(chatId, msg);
+        break;
+      }
+
+      case 'SET_BUDGET': {
+        const { amount } = command;
+        const currentMonthStr = today.slice(0, 7);
+
+        if (supabase) {
+          await setMonthlyBudget(currentMonthStr, amount, 'ARS', supabase);
+        }
+
+        const now = new Date();
+        const monthName = now.toLocaleDateString('es-ES', { month: 'long' });
+        const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+        const { total: currentSpent } = await getMonthlySpent(currentMonthStr, 'ARS', supabase);
+        const pct = amount > 0 ? Math.round((currentSpent / amount) * 100) : 0;
+        const remaining = Math.max(0, amount - currentSpent);
+
+        let reply = `🎯 *Presupuesto de ${capitalizedMonth} fijado en ${formatCurrency(amount, 'ARS')}*\n\n` +
+          `📊 *Gastado hasta ahora:* ${formatCurrency(currentSpent, 'ARS')} (${pct}%)\n`;
+
+        if (currentSpent > amount) {
+          reply += `🚨 *Excedido por:* ${formatCurrency(currentSpent - amount, 'ARS')}`;
+        } else {
+          reply += `💰 *Disponible restante:* ${formatCurrency(remaining, 'ARS')}`;
+        }
+
+        await sendTelegramMessage(chatId, reply);
         break;
       }
 

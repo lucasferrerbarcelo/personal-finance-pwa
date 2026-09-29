@@ -55,6 +55,14 @@ export interface DebtSummary extends Debt {
   payments?: DebtPayment[];
 }
 
+export interface Budget {
+  id: string;
+  month: string; // 'YYYY-MM'
+  amount: number;
+  currency: Currency;
+  created_at?: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -80,6 +88,12 @@ export interface Database {
         Row: DebtPayment;
         Insert: Omit<DebtPayment, 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Omit<DebtPayment, 'id'>>;
+        Relationships: [];
+      };
+      budgets: {
+        Row: Budget;
+        Insert: Omit<Budget, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<Budget, 'id'>>;
         Relationships: [];
       };
     };

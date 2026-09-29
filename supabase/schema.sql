@@ -110,3 +110,17 @@ INSERT INTO categories (name, type, icon, color) VALUES
   ('Inversiones y Dividendos', 'income', 'TrendingUp', '#84cc16'),
   ('Otros Ingresos', 'income', 'DollarSign', '#22c55e')
 ON CONFLICT DO NOTHING;
+
+-- 6. Budgets
+CREATE TABLE IF NOT EXISTS budgets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  month TEXT NOT NULL UNIQUE, -- 'YYYY-MM'
+  amount NUMERIC NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'ARS' CHECK (currency IN ('ARS', 'USD')),
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for budgets" ON budgets;
+CREATE POLICY "Allow all for budgets" ON budgets FOR ALL USING (true) WITH CHECK (true);
+

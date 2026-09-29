@@ -11,6 +11,11 @@ const tests = [
   'pago 10000 deuda juan',
   '/resumen',
   '/deudas',
+  '/hoy',
+  '/semana',
+  '/mes',
+  '/setpresupuesto 600000',
+  '/setpresupuesto $750.000',
 ];
 
 console.log('--- Testing Telegram Message Parser with Payment Methods ---');
