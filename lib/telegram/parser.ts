@@ -51,6 +51,10 @@ export type ParsedTelegramCommand =
       amount: number;
     }
   | {
+      type: 'DELETE_DEBT';
+      personName?: string;
+    }
+  | {
       type: 'HELP';
     }
   | {
@@ -267,6 +271,17 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
   // 6. Debts list: "/deudas", "deudas", "/misdeudas"
   if (['/deudas', 'deudas', '/misdeudas'].includes(lower)) {
     return { type: 'DEBTS_SUMMARY' };
+  }
+
+  // 6.1 Delete debt: "/borrardeuda [persona]", "borrar deuda [persona]", "eliminar deuda [persona]", "/eliminardeuda [persona]"
+  const deleteDebtRegex = /^(?:\/)?(?:borrar|eliminar)\s*(?:_|\s*)deuda(?:s)?(?:\s+(?:a\s+|de\s+|con\s+)?(.+))?$/i;
+  const deleteDebtMatch = trimmed.match(deleteDebtRegex);
+  if (deleteDebtMatch) {
+    const person = deleteDebtMatch[1] ? clean(deleteDebtMatch[1]) : '';
+    return {
+      type: 'DELETE_DEBT',
+      personName: person || undefined,
+    };
   }
 
   // 4. Payment to debt: "pago 10000 deuda juan", "pago 10000 juan", "pague 15000 carlos"

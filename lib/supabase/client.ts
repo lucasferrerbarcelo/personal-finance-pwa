@@ -429,6 +429,27 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
   return { payment, debt: resultDebt };
 }
 
+export async function deleteDebt(id: string): Promise<boolean> {
+  if (supabase) {
+    // 1. Delete associated payments first
+    await supabase.from('debt_payments').delete().eq('debt_id', id);
+
+    // 2. Delete the debt
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    if (error) {
+      console.error('Error deleting debt from Supabase:', error);
+      throw error;
+    }
+  }
+
+  // Update local storage
+  const current = getLocalItem<DebtSummary[]>(STORAGE_KEYS.DEBTS, INITIAL_DEBTS);
+  const updated = current.filter(d => d.id !== id);
+  setLocalItem(STORAGE_KEYS.DEBTS, updated);
+
+  return true;
+}
+
 export async function fetchMonthlyBudget(monthStr: string, currency: Currency = 'ARS'): Promise<Budget | null> {
   if (supabase) {
     const { data, error } = await supabase

@@ -361,6 +361,75 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // 1.1b Delete Debt Callback: del_debt_<ID>
+      const delDebtMatch = data.match(/^del_debt_(.+)$/);
+      if (delDebtMatch) {
+        const debtId = delDebtMatch[1];
+        const { data: debt } = await supabase.from('debts').select('*').eq('id', debtId).single();
+
+        if (debt) {
+          await supabase.from('debt_payments').delete().eq('debt_id', debtId);
+          await supabase.from('debts').delete().eq('id', debtId);
+
+          const roleLabel = debt.type === 'owe' ? 'Debías a' : 'Te debía';
+          await answerTelegramCallbackQuery(callbackId, 'Deuda eliminada');
+          if (chatId && messageId) {
+            await editTelegramMessageText(
+              chatId,
+              messageId,
+              `🗑 *Deuda eliminada correctamente:*\n• ${roleLabel}: *${debt.person_name}*\n• Monto: *${formatCurrency(Number(debt.total_amount), debt.currency)}*`,
+              { replyMarkup: { inline_keyboard: [] } }
+            );
+          }
+        } else {
+          await answerTelegramCallbackQuery(callbackId, 'La deuda ya no existe');
+          if (chatId && messageId) {
+            await editTelegramMessageText(
+              chatId,
+              messageId,
+              `⚠️ Esta deuda ya no existe o fue eliminada previamente.`,
+              { replyMarkup: { inline_keyboard: [] } }
+            );
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // 1.1c List active debts to delete: list_del_debts
+      if (data === 'list_del_debts') {
+        const { data: debts } = await supabase
+          .from('debts')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(8);
+
+        await answerTelegramCallbackQuery(callbackId);
+        if (chatId && messageId) {
+          if (!debts || debts.length === 0) {
+            await editTelegramMessageText(chatId, messageId, `🎉 No tenés deudas registradas para borrar.`);
+          } else {
+            const buttons = debts.map(d => [
+              {
+                text: `🗑 ${d.type === 'owe' ? '🔴 Debo a' : '🟢 Me debe'} ${d.person_name} (${formatCurrency(Number(d.total_amount), d.currency)})`,
+                callback_data: `del_debt_${d.id}`,
+              },
+            ]);
+            await editTelegramMessageText(
+              chatId,
+              messageId,
+              `📋 *Elegí la deuda que querés borrar:*`,
+              {
+                replyMarkup: {
+                  inline_keyboard: buttons,
+                },
+              }
+            );
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       // 1.2 Open Category Menu: cat_menu_<ID>
       const catMenuMatch = data.match(/^cat_menu_(.+)$/);
       if (catMenuMatch) {
@@ -1105,6 +1174,7 @@ export async function POST(req: NextRequest) {
           `• \`debo 50000 mecanico\` 👉 Registra deuda que vos debés\n` +
           `• \`me debe 20000 juan\` 👉 Registra dinero que te deben\n` +
           `• \`pago 10000 deuda juan\` 👉 Registra pago y te dice cuánto resta\n` +
+          `• \`/borrardeuda [persona]\` 👉 Borra una deuda (a favor o en contra)\n` +
           `• \`/deudas\` 👉 Muestra el estado de todas tus deudas activas`;
         await sendTelegramMessage(chatId, helpMessage);
         break;
@@ -1359,7 +1429,20 @@ export async function POST(req: NextRequest) {
           msg += `• USD: ${netUsd >= 0 ? '+' : ''}${formatCurrency(netUsd, 'USD')}\n`;
         }
 
-        await sendTelegramMessage(chatId, msg);
+        const debtsMarkup = activeDebts.length > 0
+          ? {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🗑 Borrar una Deuda',
+                    callback_data: 'list_del_debts',
+                  },
+                ],
+              ],
+            }
+          : undefined;
+
+        await sendTelegramMessage(chatId, msg, { replyMarkup: debtsMarkup });
         break;
       }
 
@@ -1395,7 +1478,108 @@ export async function POST(req: NextRequest) {
           `💵 *Monto Total:* ${formatCurrency(amount, currency)}\n` +
           `📌 *Estado:* Activa`;
 
-        await sendTelegramMessage(chatId, reply);
+        if (createdDebtId) {
+          await sendTelegramMessage(chatId, reply, {
+            replyMarkup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🗑 Deshacer / Borrar Deuda',
+                    callback_data: `del_debt_${createdDebtId}`,
+                  },
+                ],
+              ],
+            },
+          });
+        } else {
+          await sendTelegramMessage(chatId, reply);
+        }
+        break;
+      }
+
+      case 'DELETE_DEBT': {
+        const { personName } = command;
+        if (!supabase) {
+          await sendTelegramMessage(chatId, `⚠️ Base de datos no disponible.`);
+          break;
+        }
+
+        if (personName) {
+          // Find debts matching person_name (both active or settled, owe or owed)
+          const { data: debts, error: debtsError } = await supabase
+            .from('debts')
+            .select('*')
+            .ilike('person_name', `%${personName}%`)
+            .order('created_at', { ascending: false });
+
+          if (debtsError || !debts || debts.length === 0) {
+            await sendTelegramMessage(
+              chatId,
+              `❓ No encontré deudas registradas para "*${personName}*". Podés ver la lista completa con /deudas.`
+            );
+            break;
+          }
+
+          if (debts.length === 1) {
+            const d = debts[0];
+            await supabase.from('debt_payments').delete().eq('debt_id', d.id);
+            await supabase.from('debts').delete().eq('id', d.id);
+
+            const roleLabel = d.type === 'owe' ? 'Debías a' : 'Te debía';
+            await sendTelegramMessage(
+              chatId,
+              `🗑 *Deuda eliminada correctamente:*\n• ${roleLabel}: *${d.person_name}*\n• Monto: *${formatCurrency(Number(d.total_amount), d.currency)}*`
+            );
+          } else {
+            // Multiple debts found: show inline buttons to choose which to delete
+            const buttons = debts.slice(0, 6).map(d => [
+              {
+                text: `🗑 ${d.type === 'owe' ? '🔴 Debo a' : '🟢 Me debe'} ${d.person_name} (${formatCurrency(Number(d.total_amount), d.currency)})`,
+                callback_data: `del_debt_${d.id}`,
+              },
+            ]);
+
+            await sendTelegramMessage(
+              chatId,
+              `🔍 Encontré varias deudas para "*${personName}*". Elegí cuál querés borrar:`,
+              {
+                replyMarkup: {
+                  inline_keyboard: buttons,
+                },
+              }
+            );
+          }
+        } else {
+          // No person specified, list active debts to choose from
+          const { data: debts } = await supabase
+            .from('debts')
+            .select('*')
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(8);
+
+          if (!debts || debts.length === 0) {
+            await sendTelegramMessage(chatId, `🎉 No tenés deudas activas registradas para borrar.`);
+            break;
+          }
+
+          const buttons = debts.map(d => [
+            {
+              text: `🗑 ${d.type === 'owe' ? '🔴 Debo a' : '🟢 Me debe'} ${d.person_name} (${formatCurrency(Number(d.total_amount), d.currency)})`,
+              callback_data: `del_debt_${d.id}`,
+            },
+          ]);
+
+          await sendTelegramMessage(
+            chatId,
+            `📋 *Elegí la deuda que querés borrar:*`,
+            {
+              replyMarkup: {
+                inline_keyboard: buttons,
+              },
+            }
+          );
+        }
         break;
       }
 
@@ -1729,6 +1913,7 @@ export async function POST(req: NextRequest) {
           `• \`debo 50000 mecanico\`\n` +
           `• \`me debe 20000 juan\`\n` +
           `• \`pago 10000 deuda juan\`\n` +
+          `• \`/borrardeuda juan\`\n` +
           `• \`/deudas\`\n` +
           `• \`/resumen\`\n\n` +
           `O escribí \`/ayuda\` para más detalles.`

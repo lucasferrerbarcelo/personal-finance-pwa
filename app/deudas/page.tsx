@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { DebtSummary, DebtType, Transaction } from '@/lib/supabase/types';
-import { fetchDebts, fetchTransactions } from '@/lib/supabase/client';
+import { fetchDebts, fetchTransactions, deleteDebt } from '@/lib/supabase/client';
 import { DebtCard } from '@/components/Deudas/DebtCard';
 import { DebtPaymentModal } from '@/components/Deudas/DebtPaymentModal';
 import { NewDebtModal } from '@/components/Deudas/NewDebtModal';
@@ -47,6 +47,25 @@ export default function DeudasPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleDeleteDebt = async (debt: DebtSummary) => {
+    const isOwed = debt.type === 'owed';
+    const detail = isOwed
+      ? `te debe ${formatCurrency(debt.remaining_amount, debt.currency)}`
+      : `le debés ${formatCurrency(debt.remaining_amount, debt.currency)}`;
+
+    const confirmMsg = `¿Eliminar la deuda de "${debt.person_name}" (${detail})?\n\nEsta acción borrará la deuda y su historial de pagos permanentemente.`;
+
+    if (window.confirm(confirmMsg)) {
+      try {
+        await deleteDebt(debt.id);
+        await loadData();
+      } catch (err: any) {
+        console.error('Error al eliminar deuda:', err);
+        alert(`Error al eliminar la deuda: ${err?.message || 'Error desconocido'}`);
+      }
+    }
+  };
 
   // Totals
   const activeDebts = debts.filter(d => d.status === 'active');
@@ -264,6 +283,7 @@ export default function DeudasPage() {
               key={debt.id}
               debt={debt}
               onOpenPaymentModal={d => setSelectedDebtForPayment(d)}
+              onDeleteDebt={handleDeleteDebt}
             />
           ))}
         </div>

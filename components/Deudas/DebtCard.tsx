@@ -3,14 +3,15 @@
 import React, { useState } from 'react';
 import { DebtSummary } from '@/lib/supabase/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { Plus, CheckCircle2, ChevronDown, ChevronUp, History, User } from 'lucide-react';
+import { Plus, CheckCircle2, ChevronDown, ChevronUp, History, User, Trash2 } from 'lucide-react';
 
 interface DebtCardProps {
   debt: DebtSummary;
   onOpenPaymentModal: (debt: DebtSummary) => void;
+  onDeleteDebt: (debt: DebtSummary) => void;
 }
 
-export function DebtCard({ debt, onOpenPaymentModal }: DebtCardProps) {
+export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardProps) {
   const [showHistory, setShowHistory] = useState(false);
 
   const isOwedToMe = debt.type === 'owed';
@@ -116,16 +117,27 @@ export function DebtCard({ debt, onOpenPaymentModal }: DebtCardProps) {
           {showHistory ? <ChevronUp className="w-3.5 h-3.5 stroke-[2.5px]" /> : <ChevronDown className="w-3.5 h-3.5 stroke-[2.5px]" />}
         </button>
 
-        {/* Register payment button */}
-        {!isSettled && (
+        <div className="flex items-center gap-2">
+          {/* Delete debt button */}
           <button
-            onClick={() => onOpenPaymentModal(debt)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px]"
+            onClick={() => onDeleteDebt(debt)}
+            className="p-1.5 text-black hover:bg-rose-200 hover:text-rose-900 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
+            title="Eliminar deuda"
           >
-            <Plus className="w-3.5 h-3.5 stroke-[3px]" />
-            <span>Registrar Pago</span>
+            <Trash2 className="w-3.5 h-3.5 stroke-[2.5px] text-rose-700" />
           </button>
-        )}
+
+          {/* Register payment button */}
+          {!isSettled && (
+            <button
+              onClick={() => onOpenPaymentModal(debt)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px]"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3px]" />
+              <span>Registrar Pago</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Payments History Accordion */}
