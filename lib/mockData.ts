@@ -11,10 +11,11 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat-8', name: 'Entretenimiento', type: 'expense', icon: 'Tv', color: '#14b8a6' },
   { id: 'cat-9', name: 'Educación', type: 'expense', icon: 'GraduationCap', color: '#f97316' },
   { id: 'cat-10', name: 'Otros Gastos', type: 'expense', icon: 'MoreHorizontal', color: '#64748b' },
-  { id: 'cat-11', name: 'Sueldo', type: 'income', icon: 'Briefcase', color: '#10b981' },
-  { id: 'cat-12', name: 'Freelance / Proyectos', type: 'income', icon: 'Code', color: '#06b6d4' },
-  { id: 'cat-13', name: 'Inversiones y Dividendos', type: 'income', icon: 'TrendingUp', color: '#84cc16' },
-  { id: 'cat-14', name: 'Otros Ingresos', type: 'income', icon: 'DollarSign', color: '#22c55e' },
+  { id: 'cat-11', name: 'Sueldo', type: 'income', icon: 'DollarSign', color: '#10b981' },
+  { id: 'cat-12', name: 'Ventas', type: 'income', icon: 'Tag', color: '#f59e0b' },
+  { id: 'cat-13', name: 'Honorarios', type: 'income', icon: 'Briefcase', color: '#06b6d4' },
+  { id: 'cat-14', name: 'Transferencia', type: 'income', icon: 'ArrowRightLeft', color: '#3b82f6' },
+  { id: 'cat-15', name: 'Otros Ingresos', type: 'income', icon: 'TrendingUp', color: '#14b8a6' },
 ];
 
 export const INITIAL_TRANSACTIONS: Transaction[] = [

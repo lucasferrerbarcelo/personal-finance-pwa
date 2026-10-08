@@ -162,3 +162,42 @@ export function findBestCategory(
   const otros = categories.find(c => normalize(c.name).includes('otro'));
   return otros || null;
 }
+
+/**
+ * Intelligently finds the best category matching an income note/concept
+ * Supports suggested categories: 'Sueldo', 'Ventas', 'Honorarios', 'Transferencia' or 'Otros Ingresos'
+ */
+export function findBestIncomeCategory(
+  concept: string,
+  suggestedName: string,
+  categories: Array<{ id: string; name: string }>
+): { id: string; name: string } | null {
+  if (!categories || categories.length === 0) return null;
+
+  // 1. Direct match with suggestedName (e.g. 'Sueldo', 'Ventas', 'Honorarios', 'Transferencia', 'Otros Ingresos')
+  const directMatch = categories.find(
+    c => normalize(c.name) === normalize(suggestedName)
+  );
+  if (directMatch) return directMatch;
+
+  // 2. Partial match with suggestedName
+  const partialMatch = categories.find(
+    c => normalize(c.name).includes(normalize(suggestedName)) ||
+         normalize(suggestedName).includes(normalize(c.name))
+  );
+  if (partialMatch) return partialMatch;
+
+  // 3. Match using concept words
+  const conceptNorm = normalize(concept);
+  for (const cat of categories) {
+    const catNorm = normalize(cat.name);
+    if (conceptNorm.includes(catNorm) || catNorm.includes(conceptNorm)) {
+      return cat;
+    }
+  }
+
+  // 4. Fallback to "Otros Ingresos" or first available category
+  const otros = categories.find(c => normalize(c.name).includes('otro'));
+  return otros || categories[0] || null;
+}
+

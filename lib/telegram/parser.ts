@@ -2,6 +2,15 @@ import { Currency, DebtType, PaymentMethod } from '../supabase/types';
 
 export type ParsedTelegramCommand =
   | {
+      type: 'INCOME';
+      amount: number;
+      currency: Currency;
+      note: string;
+      suggestedCategory: string;
+      paymentMethod: PaymentMethod;
+      hasExplicitMethod: boolean;
+    }
+  | {
       type: 'EXPENSE';
       amount: number;
       currency: Currency;
@@ -56,6 +65,14 @@ function clean(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
 }
 
+function normalize(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
 /**
  * Extracts payment method from text and returns cleaned string without payment keywords
  */
@@ -91,6 +108,123 @@ function parseAmountNumber(val: string): number {
     cleanVal = cleanVal.replace(',', '.');
   }
   return parseFloat(cleanVal) || 0;
+}
+
+/**
+ * Extracts payment method for income (cash, bank, transfer, mercado pago)
+ */
+export function extractIncomePaymentMethod(text: string): {
+  method: PaymentMethod;
+  cleaned: string;
+  hasExplicitMethod: boolean;
+} {
+  const patterns: [RegExp, PaymentMethod][] = [
+    [/\b(efectivo|cash|billetes|en\s+mano)\b/i, 'efectivo'],
+    [/\b(banco|bancaria|cuenta\s+bancaria|galicia|santander|bbva|macro|nacion|nación|itau|brubank)\b/i, 'transferencia'],
+    [/\b(mercadopago|mercado\s+pago|mp)\b/i, 'transferencia'],
+    [/\b(transferencia|transf|transfer)\b/i, 'transferencia'],
+  ];
+
+  for (const [regex, method] of patterns) {
+    if (regex.test(text)) {
+      const cleaned = clean(text.replace(regex, ''));
+      return { method, cleaned, hasExplicitMethod: true };
+    }
+  }
+
+  return { method: 'transferencia', cleaned: clean(text), hasExplicitMethod: false };
+}
+
+/**
+ * Detects and parses an INCOME transaction if present.
+ * Keywords: "ingreso", "cobre", "cobré", "me transfirieron", "entraron", "depósito", "deposito", "sueldo", "pago recibido"
+ * Or command: /ingreso <monto> <concepto>
+ */
+export function tryParseIncome(text: string): ParsedTelegramCommand | null {
+  const trimmed = clean(text);
+  const norm = normalize(trimmed);
+
+  const isCommand = /^\/?ingreso\b/i.test(trimmed);
+  const hasIncomeKeyword = /(?:^|\s)(ingreso|ingresos|cobre|me\s+transfirieron|transfirieron|entraron|deposito|sueldo|pago\s+recibido)(?:\s|[.,;:!¡¿?]|$)/i.test(norm);
+
+  if (!isCommand && !hasIncomeKeyword) {
+    return null;
+  }
+
+  // Ensure it's not a debt payment like "pago 10000 deuda juan" unless it has "pago recibido"
+  if (/^pago\s+\d/i.test(trimmed) && !/pago\s+recibido/i.test(trimmed)) {
+    return null;
+  }
+
+  // Currency detection
+  const isUsd = /(?:usd|u\$s|dolares|dólares)/i.test(trimmed);
+  const currency: Currency = isUsd ? 'USD' : 'ARS';
+
+  // Amount extraction: supports "$ 250.000", "250000", "150.000,50", "100 usd"
+  const amountMatch = trimmed.match(/(?:(?:\$|u\$s|usd)\s*)?(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:\s*(?:usd|u\$s|dolares|dólares|\$))?/i);
+  if (!amountMatch) {
+    return null;
+  }
+
+  const rawAmount = amountMatch[1];
+  const amount = parseAmountNumber(rawAmount);
+  if (amount <= 0) {
+    return null;
+  }
+
+  // Remove the matched amount from remaining text
+  const remaining = trimmed.replace(amountMatch[0], ' ');
+
+  // Payment method extraction
+  const { method, cleaned: textAfterMethod, hasExplicitMethod } = extractIncomePaymentMethod(remaining);
+
+  // Remove income trigger keywords to extract the pure concept/note
+  let noteText = textAfterMethod
+    .replace(/^\/?ingreso\b/i, '')
+    .replace(/(?:^|\s)(?:ingreso|ingresos|cobr[eé]|cobre|cobré|me\s+transfirieron|transfirieron|entraron|dep[oó]sito|deposito|depósito|pago\s+recibido)(?:\s|$)/gi, ' ')
+    .replace(/(?:usd|u\$s|dolares|dólares|ars|\$)/gi, ' ')
+    .trim();
+
+  // Clean prepositions at start or end (e.g. "de", "en", "por")
+  noteText = noteText.replace(/^(?:de|en|por|un|una|el|la)\s+/i, '').replace(/\s+(?:de|en|por)$/i, '').trim();
+
+  let concept = clean(noteText);
+  if (!concept) {
+    if (/\bsueldo\b/i.test(norm)) concept = 'Sueldo';
+    else if (/\bdeposito\b/i.test(norm)) concept = 'Depósito';
+    else if (/\b(me\s+transfirieron|transfirieron|entraron)\b/i.test(norm)) concept = 'Transferencia recibida';
+    else if (/\bcobre\b/i.test(norm)) concept = 'Cobro';
+    else if (/\bpago\s+recibido\b/i.test(norm)) concept = 'Pago recibido';
+    else concept = 'Ingreso';
+  } else {
+    if (/\bsueldo\b/i.test(norm) && !/sueldo/i.test(concept)) {
+      concept = ('Sueldo ' + concept).trim();
+    }
+  }
+
+  concept = concept.charAt(0).toUpperCase() + concept.slice(1);
+
+  // Suggested category: 'Sueldo', 'Ventas', 'Honorarios', 'Transferencia' o 'Otros Ingresos'
+  let suggestedCategory = 'Otros Ingresos';
+  if (/\b(sueldo|salario|nomina|nómina|quincena|aguinaldo)\b/i.test(norm)) {
+    suggestedCategory = 'Sueldo';
+  } else if (/\b(venta|ventas|vendi|vendí|comprador|producto)\b/i.test(norm)) {
+    suggestedCategory = 'Ventas';
+  } else if (/\b(honorario|honorarios|freelance|factura|consultor|consultoria|consultoría|servicio|servicios|cliente|proyecto|clase|clases)\b/i.test(norm)) {
+    suggestedCategory = 'Honorarios';
+  } else if (/\b(transferencia|transf|me\s+transfirieron|transfirieron|entraron|deposito)\b/i.test(norm)) {
+    suggestedCategory = 'Transferencia';
+  }
+
+  return {
+    type: 'INCOME',
+    amount,
+    currency,
+    note: concept,
+    suggestedCategory,
+    paymentMethod: method,
+    hasExplicitMethod,
+  };
 }
 
 /**
@@ -185,7 +319,13 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 7. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 zapatillas 3c", "60000 3c zapatillas"
+  // 7. Income detection: /ingreso, cobre, cobré, me transfirieron, entraron, depósito, sueldo, pago recibido
+  const incomeCommand = tryParseIncome(trimmed);
+  if (incomeCommand) {
+    return incomeCommand;
+  }
+
+  // 8. Installments: "60000 zapatillas 3 cuotas", "60000 zapatillas 3 cuotas credito", "60000 zapatillas 3c", "60000 3c zapatillas"
   const cuotasRegex = /^(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(.+?)\s+(\d+)\s*(?:cuotas?|c)\b(?:\s+(.+))?$/i;
   const cuotasMatch = trimmed.match(cuotasRegex);
   if (cuotasMatch) {

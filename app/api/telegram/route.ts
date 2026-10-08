@@ -11,7 +11,7 @@ import { getServiceSupabase } from '@/lib/supabase/server';
 import { calculateInstallmentDates, formatCurrency, getCurrentDateISO } from '@/lib/utils';
 import { PaymentMethod } from '@/lib/supabase/types';
 import { INITIAL_CATEGORIES } from '@/lib/mockData';
-import { findBestCategory } from '@/lib/categories/matcher';
+import { findBestCategory, findBestIncomeCategory } from '@/lib/categories/matcher';
 import { processVoiceNoteWithGemini } from '@/lib/gemini/voice';
 import { processReceiptImageWithGemini } from '@/lib/gemini/receipt';
 import { getMonthlyBudget, getMonthlySpent, setMonthlyBudget } from '@/lib/budgets/service';
@@ -34,6 +34,11 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 function getCategoryEmoji(name: string): string {
   const lower = name.toLowerCase();
+  if (lower.includes('sueldo')) return '💰';
+  if (lower.includes('honorario')) return '💼';
+  if (lower.includes('venta')) return '🏷';
+  if (lower.includes('transferencia')) return '📲';
+  if (lower.includes('ingreso')) return '🟢';
   if (lower.includes('super')) return '🛒';
   if (lower.includes('comida') || lower.includes('salidas')) return '🍔';
   if (lower.includes('transporte') || lower.includes('combustible')) return '🚗';
@@ -56,6 +61,25 @@ function getMainTransactionKeyboard(txId: string) {
       [
         { text: '💳 Crédito', callback_data: `pay_${txId}_tarjeta_credito` },
         { text: '📲 Transf / MP', callback_data: `pay_${txId}_transferencia` },
+      ],
+      [
+        { text: '🏷 Cambiar categoría', callback_data: `cat_menu_${txId}` },
+        { text: '↩️ Deshacer', callback_data: `undo_${txId}` },
+      ],
+    ],
+  };
+}
+
+function getIncomeTransactionKeyboard(txId: string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📲 Transferencia', callback_data: `pay_${txId}_transferencia` },
+        { text: '💵 Efectivo', callback_data: `pay_${txId}_efectivo` },
+      ],
+      [
+        { text: '💙 Mercado Pago', callback_data: `pay_${txId}_transferencia` },
+        { text: '🏦 Banco', callback_data: `pay_${txId}_transferencia` },
       ],
       [
         { text: '🏷 Cambiar categoría', callback_data: `cat_menu_${txId}` },
@@ -169,6 +193,59 @@ function formatExpenseMessage(params: {
   );
 }
 
+function formatIncomeMessage(params: {
+  amount: number;
+  currency: 'ARS' | 'USD';
+  concept: string;
+  categoryName: string;
+  methodLabel: string;
+  nuevoBalance: number;
+}) {
+  const { amount, currency, concept, categoryName, methodLabel, nuevoBalance } = params;
+  return (
+    `🟢 *Ingreso registrado:* +${formatCurrency(amount, currency)}\n` +
+    (concept && concept !== categoryName ? `📝 *Concepto:* ${concept}\n` : '') +
+    `📂 *Categoría:* ${categoryName}\n` +
+    `💳 *Método:* ${methodLabel}\n` +
+    `💰 *Balance total disponible:* ${formatCurrency(nuevoBalance, currency)}`
+  );
+}
+
+async function getAvailableCashBalance(
+  monthStr: string,
+  currency: 'ARS' | 'USD',
+  supabase: any
+): Promise<number> {
+  if (!supabase) return 0;
+  try {
+    const startOfMonth = `${monthStr}-01`;
+    const endOfMonth = `${monthStr}-31`;
+    const { data: txs } = await supabase
+      .from('transactions')
+      .select('amount, currency, type, payment_method')
+      .gte('date', startOfMonth)
+      .lte('date', endOfMonth);
+
+    if (!txs) return 0;
+    let income = 0;
+    let cashExpense = 0;
+    for (const t of txs) {
+      const cur = t.currency || 'ARS';
+      if (cur !== currency) continue;
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'income') {
+        income += amt;
+      } else if (t.type === 'expense' && t.payment_method !== 'tarjeta_credito') {
+        cashExpense += amt;
+      }
+    }
+    return income - cashExpense;
+  } catch (err) {
+    console.warn('[Balance Calculation Error]:', err);
+    return 0;
+  }
+}
+
 async function getBudgetAlertFooter(
   addedAmount: number,
   currency: 'ARS' | 'USD',
@@ -261,8 +338,9 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ ok: true });
         }
 
+        const isIncome = tx.type === 'income';
         const amountFormatted = formatCurrency(Number(tx.amount), tx.currency);
-        const concept = tx.note || 'Gasto';
+        const concept = tx.note || (isIncome ? 'Ingreso' : 'Gasto');
 
         // Delete either by parent_transaction_id (if installments) or by id
         if (tx.parent_transaction_id) {
@@ -271,12 +349,12 @@ export async function POST(req: NextRequest) {
           await supabase.from('transactions').delete().or(`id.eq.${txId},parent_transaction_id.eq.${txId}`);
         }
 
-        await answerTelegramCallbackQuery(callbackId, 'Gasto eliminado');
+        await answerTelegramCallbackQuery(callbackId, isIncome ? 'Ingreso eliminado' : 'Gasto eliminado');
         if (chatId && messageId) {
           await editTelegramMessageText(
             chatId,
             messageId,
-            `🗑 *Gasto de ${amountFormatted} eliminado correctamente.* (${concept})`,
+            `🗑 *${isIncome ? 'Ingreso de +' : 'Gasto de '}${amountFormatted} eliminado correctamente.* (${concept})`,
             { replyMarkup: { inline_keyboard: [] } }
           );
         }
@@ -287,17 +365,20 @@ export async function POST(req: NextRequest) {
       const catMenuMatch = data.match(/^cat_menu_(.+)$/);
       if (catMenuMatch) {
         const txId = catMenuMatch[1];
-        const { data: dbCategories } = await supabase.from('categories').select('*').eq('type', 'expense');
+        const { data: tx } = await supabase.from('transactions').select('type').eq('id', txId).single();
+        const txType = tx?.type || 'expense';
+
+        const { data: dbCategories } = await supabase.from('categories').select('*').eq('type', txType);
         const categoriesList = (dbCategories && dbCategories.length > 0
           ? dbCategories
-          : INITIAL_CATEGORIES.filter(c => c.type === 'expense')) as Array<{ id: string; name: string }>;
+          : INITIAL_CATEGORIES.filter(c => c.type === txType)) as Array<{ id: string; name: string }>;
 
         await answerTelegramCallbackQuery(callbackId);
         if (chatId && messageId) {
           await editTelegramMessageText(
             chatId,
             messageId,
-            cb.message?.text || 'Elegí la categoría para este gasto:',
+            cb.message?.text || (txType === 'income' ? 'Elegí la categoría para este ingreso:' : 'Elegí la categoría para este gasto:'),
             { replyMarkup: getCategoriesKeyboard(txId, categoriesList) }
           );
         }
@@ -308,13 +389,16 @@ export async function POST(req: NextRequest) {
       const payMenuMatch = data.match(/^pay_menu_(.+)$/);
       if (payMenuMatch) {
         const txId = payMenuMatch[1];
+        const { data: tx } = await supabase.from('transactions').select('type').eq('id', txId).single();
+        const isIncome = tx?.type === 'income';
+
         await answerTelegramCallbackQuery(callbackId);
         if (chatId && messageId) {
           await editTelegramMessageText(
             chatId,
             messageId,
-            cb.message?.text || 'Gasto registrado:',
-            { replyMarkup: getMainTransactionKeyboard(txId) }
+            cb.message?.text || (isIncome ? 'Ingreso registrado:' : 'Gasto registrado:'),
+            { replyMarkup: isIncome ? getIncomeTransactionKeyboard(txId) : getMainTransactionKeyboard(txId) }
           );
         }
         return NextResponse.json({ ok: true });
@@ -326,10 +410,13 @@ export async function POST(req: NextRequest) {
         const txId = setCatMatch[1];
         const shortCatId = setCatMatch[2];
 
-        const { data: dbCategories } = await supabase.from('categories').select('*').eq('type', 'expense');
+        const { data: txBefore } = await supabase.from('transactions').select('type').eq('id', txId).single();
+        const txType = txBefore?.type || 'expense';
+
+        const { data: dbCategories } = await supabase.from('categories').select('*').eq('type', txType);
         const categoriesList = (dbCategories && dbCategories.length > 0
           ? dbCategories
-          : INITIAL_CATEGORIES.filter(c => c.type === 'expense')) as Array<{ id: string; name: string }>;
+          : INITIAL_CATEGORIES.filter(c => c.type === txType)) as Array<{ id: string; name: string }>;
 
         const targetCat = categoriesList.find(c => c.id.startsWith(shortCatId));
 
@@ -350,19 +437,36 @@ export async function POST(req: NextRequest) {
           await answerTelegramCallbackQuery(callbackId, `Categoría: ${targetCat.name}`);
 
           if (chatId && messageId && tx) {
-            const isReceipt = (cb.message?.text || '').includes('Ticket procesado');
-            const updatedText = formatExpenseMessage({
-              amount: Number(tx.amount),
-              currency: tx.currency,
-              concept: tx.note || 'Gasto',
-              categoryName: targetCat.name,
-              methodLabel,
-              isReceipt,
-            });
+            if (tx.type === 'income') {
+              const currentMonthStr = (tx.date || today).slice(0, 7);
+              const nuevoBalance = await getAvailableCashBalance(currentMonthStr, tx.currency, supabase);
+              const updatedText = formatIncomeMessage({
+                amount: Number(tx.amount),
+                currency: tx.currency,
+                concept: tx.note || 'Ingreso',
+                categoryName: targetCat.name,
+                methodLabel,
+                nuevoBalance,
+              });
 
-            await editTelegramMessageText(chatId, messageId, updatedText, {
-              replyMarkup: getMainTransactionKeyboard(txId),
-            });
+              await editTelegramMessageText(chatId, messageId, updatedText, {
+                replyMarkup: getIncomeTransactionKeyboard(txId),
+              });
+            } else {
+              const isReceipt = (cb.message?.text || '').includes('Ticket procesado');
+              const updatedText = formatExpenseMessage({
+                amount: Number(tx.amount),
+                currency: tx.currency,
+                concept: tx.note || 'Gasto',
+                categoryName: targetCat.name,
+                methodLabel,
+                isReceipt,
+              });
+
+              await editTelegramMessageText(chatId, messageId, updatedText, {
+                replyMarkup: getMainTransactionKeyboard(txId),
+              });
+            }
           }
         } else {
           await answerTelegramCallbackQuery(callbackId, 'Categoría no encontrada');
@@ -385,6 +489,38 @@ export async function POST(req: NextRequest) {
 
         if (!tx) {
           await answerTelegramCallbackQuery(callbackId, 'No se encontró la transacción');
+          return NextResponse.json({ ok: true });
+        }
+
+        if (tx.type === 'income') {
+          await supabase.from('transactions').update({
+            payment_method: newMethod,
+            statement_month: null,
+            credit_card_id: null,
+          } as any).eq('id', txId);
+
+          const methodLabel = PAYMENT_METHOD_LABELS[newMethod] || newMethod;
+          const catName = tx.category?.name || 'Otros Ingresos';
+          const currentMonthStr = (tx.date || today).slice(0, 7);
+          const nuevoBalance = await getAvailableCashBalance(currentMonthStr, tx.currency, supabase);
+
+          await answerTelegramCallbackQuery(callbackId, `Método: ${methodLabel}`);
+
+          if (chatId && messageId) {
+            const updatedText = formatIncomeMessage({
+              amount: Number(tx.amount),
+              currency: tx.currency,
+              concept: tx.note || 'Ingreso',
+              categoryName: catName,
+              methodLabel,
+              nuevoBalance,
+            });
+
+            await editTelegramMessageText(chatId, messageId, updatedText, {
+              replyMarkup: getIncomeTransactionKeyboard(txId),
+            });
+          }
+
           return NextResponse.json({ ok: true });
         }
 
@@ -541,15 +677,20 @@ export async function POST(req: NextRequest) {
 
     // Fetch existing categories from Supabase (or fallback)
     let categoriesList: Array<{ id: string; name: string }> = INITIAL_CATEGORIES.filter(c => c.type === 'expense');
+    let incomeCategoriesList: Array<{ id: string; name: string }> = INITIAL_CATEGORIES.filter(c => c.type === 'income');
+    let allCategoriesList: Array<{ id: string; name: string }> = INITIAL_CATEGORIES;
+
     if (supabase) {
-      const { data: dbCats } = await supabase.from('categories').select('*').eq('type', 'expense');
+      const { data: dbCats } = await supabase.from('categories').select('*');
       if (dbCats && dbCats.length > 0) {
-        categoriesList = dbCats as Array<{ id: string; name: string }>;
+        allCategoriesList = dbCats as Array<{ id: string; name: string }>;
+        categoriesList = dbCats.filter((c: any) => c.type === 'expense') as Array<{ id: string; name: string }>;
+        incomeCategoriesList = dbCats.filter((c: any) => c.type === 'income') as Array<{ id: string; name: string }>;
       }
     }
 
     // -------------------------------------------------------------
-    // 2.1 Voice Note to Expense (Voice-to-Expense)
+    // 2.1 Voice Note to Expense or Income (Voice-to-Expense / Income)
     // -------------------------------------------------------------
     const voice = message.voice || message.audio;
     if (voice) {
@@ -571,7 +712,7 @@ export async function POST(req: NextRequest) {
           parsedVoice = await processVoiceNoteWithGemini(
             audioBuffer,
             voice.mime_type || 'audio/ogg',
-            categoriesList
+            allCategoriesList
           );
         } catch (err: any) {
           if (err.message === 'GEMINI_API_KEY_NOT_CONFIGURED') {
@@ -610,8 +751,63 @@ export async function POST(req: NextRequest) {
         if (!parsedVoice || parsedVoice.amount <= 0) {
           await sendTelegramMessage(
             chatId,
-            `🤔 No pude identificar un monto en el audio. Por favor intentá diciendo claramente el monto y concepto (ej: *"Gasté 3500 en café con medialunas en efectivo"*).`
+            `🤔 No pude identificar un monto en el audio. Por favor intentá diciendo claramente el monto y concepto (ej: *"Gasté 3500 en café con medialunas en efectivo"* o *"Cobré 450000 de sueldo por transferencia"*).`
           );
+          return NextResponse.json({ ok: true });
+        }
+
+        // Handle Income from voice note
+        if (parsedVoice.type === 'income') {
+          const matchedCategory = findBestIncomeCategory(
+            parsedVoice.concept,
+            parsedVoice.category_name || 'Otros Ingresos',
+            incomeCategoriesList
+          );
+          const categoryId = matchedCategory?.id || null;
+          const categoryName = matchedCategory?.name || parsedVoice.category_name || 'Otros Ingresos';
+          const singleTxId = crypto.randomUUID();
+
+          if (supabase) {
+            const payload = {
+              id: singleTxId,
+              type: 'income',
+              amount: parsedVoice.amount,
+              currency: parsedVoice.currency,
+              category_id: categoryId,
+              date: today,
+              note: parsedVoice.concept,
+              payment_method: parsedVoice.payment_method,
+              total_installments: 1,
+              current_installment: 1,
+              installment_total: 1,
+              installment_current: 1,
+            };
+
+            const { error: insErr } = await supabase.from('transactions').insert([payload] as any).select();
+            if (insErr) {
+              console.error("Error guardando ingreso de voz en base de datos:", insErr);
+              await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${insErr.message}`);
+              return NextResponse.json({ ok: true });
+            }
+          }
+
+          const methodLabel = PAYMENT_METHOD_LABELS[parsedVoice.payment_method] || '📲 Transf / MP';
+          const currentMonthStr = today.slice(0, 7);
+          const nuevoBalance = await getAvailableCashBalance(currentMonthStr, parsedVoice.currency, supabase);
+
+          const reply = formatIncomeMessage({
+            amount: parsedVoice.amount,
+            currency: parsedVoice.currency,
+            concept: parsedVoice.concept,
+            categoryName,
+            methodLabel,
+            nuevoBalance,
+          });
+
+          await sendTelegramMessage(chatId, reply, {
+            replyMarkup: getIncomeTransactionKeyboard(singleTxId),
+          });
+
           return NextResponse.json({ ok: true });
         }
 
@@ -892,17 +1088,18 @@ export async function POST(req: NextRequest) {
     switch (command.type) {
       case 'HELP': {
         const helpMessage = `💡 *Comandos disponibles de Gastos y Finanzas:*\n\n` +
+          `• 🟢 *Registrar Ingresos:* \`/ingreso 250000 sueldo\`, \`cobre 450000 sueldo\`, \`me transfirieron 35000 venta\`, \`entraron 80000 mp\`\n` +
           `• 📸 *Fotos de Tickets:* Mandá una foto o factura para registrarla automáticamente\n` +
-          `• 🎙 *Notas de voz:* Mandá un audio diciendo tu gasto (ej: _"Gasté 4500 en el súper en efectivo"_)\n` +
+          `• 🎙 *Notas de voz:* Mandá un audio diciendo tu gasto o ingreso (ej: _"Gasté 4500 en el súper en efectivo"_ o _"Cobré 450000 de sueldo por transferencia"_)\n` +
           `• \`3500 cafe\` 👉 Registra gasto con botones interactivos\n` +
           `• \`3500 cafe efectivo\` 👉 Registra gasto directamente en efectivo\n` +
           `• \`12000 nafta debito\` 👉 Registra gasto con tarjeta de débito\n` +
           `• \`60000 zapatillas 3 cuotas credito\` 👉 Compra en cuotas con tarjeta de crédito\n` +
           `• \`25 usd hosting\` 👉 Registra gasto en USD\n\n` +
           `🔍 *Consultas Rápidas y Presupuesto:*\n` +
-          `• \`/hoy\` 👉 Gastos del día de hoy\n` +
+          `• \`/hoy\` 👉 Movimientos del día con desglose de ingresos, gastos y saldo neto\n` +
           `• \`/semana\` 👉 Gastos de los últimos 7 días\n` +
-          `• \`/mes\` 👉 Resumen mensual con Top 3 categorías y presupuesto\n` +
+          `• \`/mes\` 👉 Resumen mensual con ingresos, gastos, saldo neto, tarjeta a vencer y presupuesto\n` +
           `• \`/setpresupuesto <monto>\` 👉 Fijar presupuesto mensual (ej: \`/setpresupuesto 600000\`)\n\n` +
           `📋 *Deudas y Préstamos:*\n` +
           `• \`debo 50000 mecanico\` 👉 Registra deuda que vos debés\n` +
@@ -910,6 +1107,58 @@ export async function POST(req: NextRequest) {
           `• \`pago 10000 deuda juan\` 👉 Registra pago y te dice cuánto resta\n` +
           `• \`/deudas\` 👉 Muestra el estado de todas tus deudas activas`;
         await sendTelegramMessage(chatId, helpMessage);
+        break;
+      }
+
+      case 'INCOME': {
+        const { amount, currency, note, suggestedCategory, paymentMethod } = command;
+
+        const matchedCategory = findBestIncomeCategory(note, suggestedCategory, incomeCategoriesList);
+        const categoryId = matchedCategory?.id || null;
+        const categoryName = matchedCategory?.name || suggestedCategory || 'Otros Ingresos';
+        const methodLabel = PAYMENT_METHOD_LABELS[paymentMethod] || '📲 Transf / MP';
+
+        const txId = crypto.randomUUID();
+
+        if (supabase) {
+          const payload = {
+            id: txId,
+            type: 'income',
+            amount,
+            currency,
+            category_id: categoryId,
+            date: today,
+            note,
+            payment_method: paymentMethod,
+            total_installments: 1,
+            current_installment: 1,
+            installment_total: 1,
+            installment_current: 1,
+          };
+
+          const { data, error } = await supabase.from('transactions').insert([payload] as any).select();
+          if (error) {
+            console.error("Error guardando ingreso en base de datos:", error);
+            await sendTelegramMessage(chatId, `⚠️ Error al guardar en base de datos: ${error.message}`);
+            return NextResponse.json({ ok: true });
+          }
+        }
+
+        const currentMonthStr = today.slice(0, 7);
+        const nuevoBalance = await getAvailableCashBalance(currentMonthStr, currency, supabase);
+
+        const reply = formatIncomeMessage({
+          amount,
+          currency,
+          concept: note,
+          categoryName,
+          methodLabel,
+          nuevoBalance,
+        });
+
+        await sendTelegramMessage(chatId, reply, {
+          replyMarkup: getIncomeTransactionKeyboard(txId),
+        });
         break;
       }
 
@@ -1217,35 +1466,69 @@ export async function POST(req: NextRequest) {
       }
 
       case 'TODAY': {
-        let totalArs = 0;
-        let totalUsd = 0;
+        let incomeArs = 0;
+        let incomeUsd = 0;
+        let cashExpenseArs = 0;
+        let cashExpenseUsd = 0;
+        let creditExpenseArs = 0;
+        let creditExpenseUsd = 0;
         let txCount = 0;
 
         if (supabase) {
           const { data: txs } = await supabase
             .from('transactions')
-            .select('amount, currency')
-            .eq('date', today)
-            .eq('type', 'expense');
+            .select('amount, currency, type, payment_method')
+            .eq('date', today);
 
           const list = (txs || []) as any[];
           txCount = list.length;
           for (const t of list) {
-            if (t.currency === 'USD') totalUsd += Number(t.amount);
-            else totalArs += Number(t.amount);
+            const amt = Number(t.amount) || 0;
+            const cur = t.currency || 'ARS';
+            if (t.type === 'income') {
+              if (cur === 'USD') incomeUsd += amt;
+              else incomeArs += amt;
+            } else if (t.type === 'expense') {
+              if (t.payment_method === 'tarjeta_credito') {
+                if (cur === 'USD') creditExpenseUsd += amt;
+                else creditExpenseArs += amt;
+              } else {
+                if (cur === 'USD') cashExpenseUsd += amt;
+                else cashExpenseArs += amt;
+              }
+            }
           }
         }
 
         if (txCount === 0) {
           await sendTelegramMessage(
             chatId,
-            `📅 *Gastos de hoy:*\n\n¡Todavía no registraste ningún gasto hoy!`
+            `📅 *Movimientos de hoy:*\n\n¡Todavía no registraste ningún movimiento hoy!`
           );
         } else {
-          let msg = `📅 *Gastos de hoy:* ${formatCurrency(totalArs, 'ARS')} (${txCount} movimiento${txCount === 1 ? '' : 's'})`;
-          if (totalUsd > 0) {
-            msg += `\n🇺🇸 *Total USD:* ${formatCurrency(totalUsd, 'USD')}`;
+          const totalExpenseArs = cashExpenseArs + creditExpenseArs;
+          const netArs = incomeArs - cashExpenseArs;
+          const netUsd = incomeUsd - cashExpenseUsd;
+
+          let msg = `📅 *Movimientos de Hoy (${today})*\n\n` +
+            `🟢 *Ingresos:* ${formatCurrency(incomeArs, 'ARS')}`;
+          if (incomeUsd > 0) msg += ` (+ ${formatCurrency(incomeUsd, 'USD')})`;
+
+          msg += `\n🔴 *Gastos:* ${formatCurrency(totalExpenseArs, 'ARS')} (Caja: ${formatCurrency(cashExpenseArs, 'ARS')})`;
+          if (cashExpenseUsd > 0 || creditExpenseUsd > 0) {
+            msg += ` (+ ${formatCurrency(cashExpenseUsd + creditExpenseUsd, 'USD')})`;
           }
+
+          msg += `\n⚖️ *Saldo Neto:* ${netArs >= 0 ? '+' : ''}${formatCurrency(netArs, 'ARS')}`;
+          if (incomeUsd > 0 || cashExpenseUsd > 0) {
+            msg += ` (${netUsd >= 0 ? '+' : ''}${formatCurrency(netUsd, 'USD')})`;
+          }
+
+          msg += `\n💳 *Tarjeta a Vencer:* ${formatCurrency(creditExpenseArs, 'ARS')}`;
+          if (creditExpenseUsd > 0) msg += ` (+ ${formatCurrency(creditExpenseUsd, 'USD')})`;
+
+          msg += `\n\n🧾 *Movimientos:* ${txCount}`;
+
           await sendTelegramMessage(chatId, msg);
         }
         break;
@@ -1301,17 +1584,19 @@ export async function POST(req: NextRequest) {
         const startOfMonth = `${currentMonthStr}-01`;
         const endOfMonth = `${currentMonthStr}-31`;
 
-        let expenseArs = 0;
-        let expenseUsd = 0;
         let incomeArs = 0;
         let incomeUsd = 0;
+        let cashExpenseArs = 0;
+        let cashExpenseUsd = 0;
+        let creditExpenseArs = 0;
+        let creditExpenseUsd = 0;
         let txCount = 0;
         const catTotals: Record<string, number> = {};
 
         if (supabase) {
           const { data: txs } = await supabase
             .from('transactions')
-            .select('amount, currency, type, category:categories(name)')
+            .select('amount, currency, type, payment_method, category:categories(name)')
             .gte('date', startOfMonth)
             .lte('date', endOfMonth);
 
@@ -1320,19 +1605,22 @@ export async function POST(req: NextRequest) {
 
           for (const tx of txList) {
             const amt = Number(tx.amount) || 0;
-            if (tx.type === 'expense') {
-              if (tx.currency === 'USD') {
-                expenseUsd += amt;
+            const cur = tx.currency || 'ARS';
+            if (tx.type === 'income') {
+              if (cur === 'USD') incomeUsd += amt;
+              else incomeArs += amt;
+            } else if (tx.type === 'expense') {
+              if (tx.payment_method === 'tarjeta_credito') {
+                if (cur === 'USD') creditExpenseUsd += amt;
+                else creditExpenseArs += amt;
               } else {
-                expenseArs += amt;
+                if (cur === 'USD') cashExpenseUsd += amt;
+                else cashExpenseArs += amt;
+              }
+
+              if (cur === 'ARS') {
                 const catName = tx.category?.name || 'General';
                 catTotals[catName] = (catTotals[catName] || 0) + amt;
-              }
-            } else if (tx.type === 'income') {
-              if (tx.currency === 'USD') {
-                incomeUsd += amt;
-              } else {
-                incomeArs += amt;
               }
             }
           }
@@ -1342,18 +1630,28 @@ export async function POST(req: NextRequest) {
         const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
         const year = now.getFullYear();
 
+        const totalExpenseArs = cashExpenseArs + creditExpenseArs;
+        const netArs = incomeArs - cashExpenseArs;
+        const netUsd = incomeUsd - cashExpenseUsd;
+
         let msg = `📊 *Resumen Mensual - ${capitalizedMonth} ${year}*\n\n` +
-          `💸 *Gastos totales:* ${formatCurrency(expenseArs, 'ARS')}`;
-        if (expenseUsd > 0) {
-          msg += ` (+ ${formatCurrency(expenseUsd, 'USD')})`;
+          `🟢 *Ingresos:* ${formatCurrency(incomeArs, 'ARS')}`;
+        if (incomeUsd > 0) msg += ` (+ ${formatCurrency(incomeUsd, 'USD')})`;
+
+        msg += `\n🔴 *Gastos:* ${formatCurrency(totalExpenseArs, 'ARS')} (Caja: ${formatCurrency(cashExpenseArs, 'ARS')})`;
+        if (cashExpenseUsd > 0 || creditExpenseUsd > 0) {
+          msg += ` (+ ${formatCurrency(cashExpenseUsd + creditExpenseUsd, 'USD')})`;
         }
 
-        msg += `\n💵 *Ingresos totales:* ${formatCurrency(incomeArs, 'ARS')}`;
-        if (incomeUsd > 0) {
-          msg += ` (+ ${formatCurrency(incomeUsd, 'USD')})`;
+        msg += `\n⚖️ *Saldo Neto:* ${netArs >= 0 ? '+' : ''}${formatCurrency(netArs, 'ARS')}`;
+        if (incomeUsd > 0 || cashExpenseUsd > 0) {
+          msg += ` (${netUsd >= 0 ? '+' : ''}${formatCurrency(netUsd, 'USD')})`;
         }
 
-        msg += `\n🧾 *Movimientos:* ${txCount}\n`;
+        msg += `\n💳 *Tarjeta a Vencer:* ${formatCurrency(creditExpenseArs, 'ARS')}`;
+        if (creditExpenseUsd > 0) msg += ` (+ ${formatCurrency(creditExpenseUsd, 'USD')})`;
+
+        msg += `\n\n🧾 *Movimientos:* ${txCount}\n`;
 
         // Top 3 categories
         const sortedCats = Object.entries(catTotals)
@@ -1363,7 +1661,7 @@ export async function POST(req: NextRequest) {
         if (sortedCats.length > 0) {
           msg += `\n🏆 *Top Categorías de Gasto:*`;
           sortedCats.forEach(([catName, amt], idx) => {
-            const pct = expenseArs > 0 ? Math.round((amt / expenseArs) * 100) : 0;
+            const pct = totalExpenseArs > 0 ? Math.round((amt / totalExpenseArs) * 100) : 0;
             msg += `\n${idx + 1}. ${getCategoryEmoji(catName)} *${catName}:* ${formatCurrency(amt, 'ARS')} (${pct}%)`;
           });
           msg += `\n`;
@@ -1374,8 +1672,8 @@ export async function POST(req: NextRequest) {
           const budget = await getMonthlyBudget(currentMonthStr, 'ARS', supabase);
           if (budget && budget.amount > 0) {
             const budgetAmt = Number(budget.amount);
-            const pct = Math.round((expenseArs / budgetAmt) * 100);
-            msg += `\n🎯 *Presupuesto:* ${formatCurrency(expenseArs, 'ARS')} / ${formatCurrency(budgetAmt, 'ARS')} (${pct}%)`;
+            const pct = Math.round((totalExpenseArs / budgetAmt) * 100);
+            msg += `\n🎯 *Presupuesto:* ${formatCurrency(totalExpenseArs, 'ARS')} / ${formatCurrency(budgetAmt, 'ARS')} (${pct}%)`;
             if (pct >= 100) {
               msg += `\n🚨 *Límite mensual superado*`;
             } else if (pct >= 80) {

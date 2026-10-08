@@ -6,7 +6,7 @@ import { Transaction } from '@/lib/supabase/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { CategoryIcon } from '../UI/CategoryIcon';
 import { PaymentMethodBadge } from '../UI/PaymentMethodBadge';
-import { ArrowRight, Pencil, Trash2, CreditCard } from 'lucide-react';
+import { ArrowRight, Pencil, Trash2, CreditCard, Wallet } from 'lucide-react';
 import { deleteTransaction } from '@/lib/supabase/client';
 
 interface RecentTransactionsProps {
@@ -76,14 +76,20 @@ export function RecentTransactions({ transactions, onEdit, onRefresh }: RecentTr
               >
                 {/* Category Icon & Concept */}
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 border-2 border-black rounded-xl bg-amber-100 flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
-                    <CategoryIcon
-                      name={tx.category?.icon}
-                      color="#000000"
-                      size={20}
-                      className="w-5 h-5 text-black"
-                    />
-                  </div>
+                  {tx.type === 'income' ? (
+                    <div className="w-10 h-10 border-2 border-black rounded-xl bg-[#86EFAC] flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
+                      <Wallet className="w-5 h-5 stroke-[2.5px] text-black" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 border-2 border-black rounded-xl bg-amber-100 flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
+                      <CategoryIcon
+                        name={tx.category?.icon}
+                        color="#000000"
+                        size={20}
+                        className="w-5 h-5 text-black"
+                      />
+                    </div>
+                  )}
 
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-black truncate">
@@ -112,7 +118,7 @@ export function RecentTransactions({ transactions, onEdit, onRefresh }: RecentTr
                   <div className="text-right">
                     <p
                       className={`font-mono font-bold text-lg tabular-nums tracking-tight ${
-                        isExpense ? 'text-black' : 'text-emerald-700'
+                        isExpense ? 'text-black' : 'text-emerald-700 font-black'
                       }`}
                     >
                       {isExpense ? '-' : '+'}

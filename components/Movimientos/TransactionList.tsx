@@ -5,7 +5,7 @@ import { Transaction } from '@/lib/supabase/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { CategoryIcon } from '../UI/CategoryIcon';
 import { PaymentMethodBadge } from '../UI/PaymentMethodBadge';
-import { Pencil, Trash2, CreditCard, Inbox } from 'lucide-react';
+import { Pencil, Trash2, CreditCard, Inbox, Wallet } from 'lucide-react';
 import { deleteTransaction } from '@/lib/supabase/client';
 
 interface TransactionListProps {
@@ -64,6 +64,9 @@ export function TransactionList({ transactions, onEdit, onRefresh }: Transaction
         const dayTotalExpenseArs = dayTxs
           .filter(t => t.type === 'expense' && t.currency === 'ARS')
           .reduce((sum, t) => sum + Number(t.amount), 0);
+        const dayTotalIncomeArs = dayTxs
+          .filter(t => t.type === 'income' && t.currency === 'ARS')
+          .reduce((sum, t) => sum + Number(t.amount), 0);
 
         return (
           <div
@@ -75,11 +78,18 @@ export function TransactionList({ transactions, onEdit, onRefresh }: Transaction
               <span className="font-mono font-black text-black uppercase tracking-wider">
                 {formatDate(dateStr, { includeYear: true })}
               </span>
-              {dayTotalExpenseArs > 0 && (
-                <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 border border-black rounded shadow-[1px_1px_0px_0px_#000] text-black">
-                  Total día: {formatCurrency(dayTotalExpenseArs, 'ARS')}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {dayTotalIncomeArs > 0 && (
+                  <span className="font-mono font-bold text-xs bg-[#86EFAC] px-2 py-0.5 border border-black rounded shadow-[1px_1px_0px_0px_#000] text-black">
+                    +{formatCurrency(dayTotalIncomeArs, 'ARS')}
+                  </span>
+                )}
+                {dayTotalExpenseArs > 0 && (
+                  <span className="font-mono font-bold text-xs bg-white px-2 py-0.5 border border-black rounded shadow-[1px_1px_0px_0px_#000] text-black">
+                    Total día: {formatCurrency(dayTotalExpenseArs, 'ARS')}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* List */}
@@ -95,14 +105,20 @@ export function TransactionList({ transactions, onEdit, onRefresh }: Transaction
                     className="p-3.5 flex items-center justify-between gap-3 group hover:bg-[#F4F1EA]/50 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 border-2 border-black rounded-xl bg-amber-100 flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
-                        <CategoryIcon
-                          name={tx.category?.icon}
-                          color="#000000"
-                          size={20}
-                          className="w-5 h-5 text-black"
-                        />
-                      </div>
+                      {tx.type === 'income' ? (
+                        <div className="w-10 h-10 border-2 border-black rounded-xl bg-[#86EFAC] flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
+                          <Wallet className="w-5 h-5 stroke-[2.5px] text-black" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 border-2 border-black rounded-xl bg-amber-100 flex items-center justify-center shrink-0 shadow-[1px_1px_0px_0px_#000]">
+                          <CategoryIcon
+                            name={tx.category?.icon}
+                            color="#000000"
+                            size={20}
+                            className="w-5 h-5 text-black"
+                          />
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-black truncate">
                           {tx.note || catName}
@@ -126,7 +142,7 @@ export function TransactionList({ transactions, onEdit, onRefresh }: Transaction
                       <div className="text-right">
                         <p
                           className={`font-mono font-bold text-lg tabular-nums tracking-tight ${
-                            isExpense ? 'text-black' : 'text-emerald-700'
+                            isExpense ? 'text-black' : 'text-emerald-700 font-black'
                           }`}
                         >
                           {isExpense ? '-' : '+'}

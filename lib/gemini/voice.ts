@@ -3,6 +3,7 @@ import { PaymentMethod } from '../supabase/types';
 import { findBestCategory } from '../categories/matcher';
 
 export interface ParsedVoiceExpense {
+  type?: 'expense' | 'income';
   amount: number;
   currency: 'ARS' | 'USD';
   concept: string;
@@ -70,11 +71,13 @@ Instrucciones de interpretación:
    - "tarjeta_credito" (si dice crédito, tarjeta de crédito, visa, mastercard, amex)
    - "transferencia" (si dice transferencia, mercado pago, mp, transf o si no especifica ningún método)
 5. "category_name": el nombre EXACTO de la categoría de la lista proporcionada que mejor corresponda al concepto.
-6. "installments": número entero de cuotas (por defecto 1, o el número mencionado si dice ej: "3 cuotas", "en 6 pagos").
-7. "raw_transcription": transcripción literal de lo que dijo el usuario.
+6. "type": "income" si la persona menciona un ingreso (ej: cobré, me pagaron, me transfirieron, sueldo, honorarios, depósito, entraron, venta), o "expense" para cualquier gasto regular.
+7. "installments": número entero de cuotas (por defecto 1, o el número mencionado si dice ej: "3 cuotas", "en 6 pagos").
+8. "raw_transcription": transcripción literal de lo que dijo el usuario.
 
 Responde ÚNICAMENTE con un objeto JSON válido con este formato:
 {
+  "type": "expense",
   "amount": 3500,
   "currency": "ARS",
   "concept": "Café con medialunas",
@@ -188,7 +191,15 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
     matchedCat = findBestCategory(concept, categories) || undefined;
   }
 
+  const rawTranscription = data.raw_transcription || '';
+  const isIncome =
+    data.type === 'income' ||
+    /(?:^|\s)(ingreso|ingresos|cobre|cobré|me\s+transfirieron|transfirieron|entraron|deposito|depósito|sueldo|pago\s+recibido)(?:\s|[.,;:!¡¿?]|$)/i.test(
+      `${concept} ${rawTranscription}`
+    );
+
   return {
+    type: isIncome ? 'income' : 'expense',
     amount,
     currency,
     concept,
@@ -196,6 +207,6 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
     category_id: matchedCat?.id || null,
     category_name: matchedCat?.name || null,
     installments,
-    rawTranscription: data.raw_transcription || '',
+    rawTranscription,
   };
 }
