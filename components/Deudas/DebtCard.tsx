@@ -55,9 +55,19 @@ export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardPro
           </div>
         </div>
 
-        <span className="font-mono font-black text-[10px] px-2 py-0.5 bg-[#F4F1EA] text-black border border-black rounded shadow-[1px_1px_0px_0px_#000]">
-          {debt.currency}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="font-mono font-black text-[10px] px-2 py-0.5 bg-[#F4F1EA] text-black border border-black rounded shadow-[1px_1px_0px_0px_#000]">
+            {debt.currency}
+          </span>
+          <button
+            onClick={() => onDeleteDebt(debt)}
+            className="p-1.5 text-rose-700 bg-rose-100 hover:bg-rose-200 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
+            title="Eliminar deuda"
+            aria-label="Eliminar deuda"
+          >
+            <Trash2 className="w-4 h-4 stroke-[2.5px]" />
+          </button>
+        </div>
       </div>
 
       {/* Amounts breakdown */}
@@ -121,10 +131,11 @@ export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardPro
           {/* Delete debt button */}
           <button
             onClick={() => onDeleteDebt(debt)}
-            className="p-1.5 text-black hover:bg-rose-200 hover:text-rose-900 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-black text-rose-700 bg-rose-100 hover:bg-rose-200 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
             title="Eliminar deuda"
           >
-            <Trash2 className="w-3.5 h-3.5 stroke-[2.5px] text-rose-700" />
+            <Trash2 className="w-3.5 h-3.5 stroke-[2.5px]" />
+            <span>Borrar</span>
           </button>
 
           {/* Register payment button */}

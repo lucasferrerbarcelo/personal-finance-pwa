@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { Transaction, DebtSummary } from '@/lib/supabase/types';
 import { formatCurrency } from '@/lib/utils';
 import { Wallet, TrendingUp, TrendingDown, HandCoins } from 'lucide-react';
@@ -119,30 +120,55 @@ export function KpiCards({ transactions, debts, currentMonthStr }: KpiCardsProps
             <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black">
               [DEUDAS]
             </span>
-            <span className="text-[11px] font-bold text-zinc-500 font-mono">
-              {activeDebts.length} activas
-            </span>
+            <Link
+              href="/deudas"
+              className="text-[11px] font-black text-black font-mono underline decoration-2 hover:text-zinc-600"
+            >
+              Ver {activeDebts.length} activas →
+            </Link>
           </div>
 
           <div className="space-y-2 mt-3 mb-2">
-            <div className="bg-[#86EFAC] border-2 border-black rounded-xl p-2 shadow-[2px_2px_0px_0px_#000]">
-              <div className="text-[10px] font-mono font-bold uppercase text-black/70">Me deben:</div>
+            <Link
+              href="/deudas"
+              className="block bg-[#86EFAC] hover:bg-[#4ade80] border-2 border-black rounded-xl p-2 shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px]"
+              title="Ir a Deudas a cobrar"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold uppercase text-black/70">Me deben:</span>
+                <span className="text-[10px] font-mono font-black text-black">Ver / Borrar →</span>
+              </div>
               <div className="text-base font-black font-mono tabular-nums text-black">
                 {formatCurrency(owedToMeArs, 'ARS')}
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-[#FB923C] border-2 border-black rounded-xl p-2 shadow-[2px_2px_0px_0px_#000]">
-              <div className="text-[10px] font-mono font-bold uppercase text-black/70">Debo:</div>
+            <Link
+              href="/deudas"
+              className="block bg-[#FB923C] hover:bg-[#f97316] border-2 border-black rounded-xl p-2 shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px]"
+              title="Ir a Deudas a pagar"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-bold uppercase text-black/70">Debo:</span>
+                <span className="text-[10px] font-mono font-black text-black">Ver / Borrar →</span>
+              </div>
               <div className="text-base font-black font-mono tabular-nums text-black">
                 {formatCurrency(iOweArs, 'ARS')}
               </div>
-            </div>
+            </Link>
           </div>
         </div>
 
-        <div className="text-[11px] font-bold text-zinc-600 pt-1 text-center font-mono">
-          Neto pendiente: {formatCurrency(owedToMeArs - iOweArs, 'ARS')}
+        <div className="pt-2 border-t-2 border-black/10 flex items-center justify-between">
+          <span className="text-[11px] font-bold text-zinc-600 font-mono">
+            Neto: {formatCurrency(owedToMeArs - iOweArs, 'ARS')}
+          </span>
+          <Link
+            href="/deudas"
+            className="text-[11px] font-mono font-black text-black bg-[#F4F1EA] hover:bg-zinc-200 px-2 py-0.5 rounded border border-black shadow-[1px_1px_0px_0px_#000]"
+          >
+            Gestionar deudas →
+          </Link>
         </div>
       </div>
     </div>
