@@ -108,7 +108,9 @@ INSERT INTO categories (name, type, icon, color) VALUES
   ('Sueldo', 'income', 'Briefcase', '#10b981'),
   ('Freelance / Proyectos', 'income', 'Code', '#06b6d4'),
   ('Inversiones y Dividendos', 'income', 'TrendingUp', '#84cc16'),
-  ('Otros Ingresos', 'income', 'DollarSign', '#22c55e')
+  ('Otros Ingresos', 'income', 'DollarSign', '#22c55e'),
+  ('Deudas', 'expense', 'HandCoins', '#f97316'),
+  ('Cobro Deudas', 'income', 'HandCoins', '#10b981')
 ON CONFLICT DO NOTHING;
 
 -- 6. Budgets

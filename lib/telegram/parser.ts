@@ -36,6 +36,9 @@ export type ParsedTelegramCommand =
       amount: number;
       currency?: Currency;
       note?: string;
+      actionType?: 'pay' | 'collect';
+      paymentMethod?: PaymentMethod;
+      hasExplicitMethod?: boolean;
     }
   | {
       type: 'SUMMARY';
@@ -86,10 +89,10 @@ export function extractPaymentMethod(text: string): {
   hasExplicitMethod: boolean;
 } {
   const patterns: [RegExp, PaymentMethod][] = [
-    [/\b(efectivo|cash)\b/i, 'efectivo'],
-    [/\b(tarjeta\s+de\s+d[eé]bito|tarjeta\s+d[eé]bito|d[eé]bito|debito)\b/i, 'tarjeta_debito'],
-    [/\b(tarjeta\s+de\s+cr[eé]dito|tarjeta\s+cr[eé]dito|cr[eé]dito|credito|visa|mastercard|master|amex|tarjeta)\b/i, 'tarjeta_credito'],
-    [/\b(transferencia|transf|mercadopago|mp)\b/i, 'transferencia'],
+    [/\b(?:en|con)?\s*(efectivo|cash)\b/i, 'efectivo'],
+    [/\b(?:con|en|por)?\s*(tarjeta\s+de\s+d[eé]bito|tarjeta\s+d[eé]bito|d[eé]bito|debito)\b/i, 'tarjeta_debito'],
+    [/\b(?:con|en|por)?\s*(tarjeta\s+de\s+cr[eé]dito|tarjeta\s+cr[eé]dito|cr[eé]dito|credito|visa|mastercard|master|amex|tarjeta)\b/i, 'tarjeta_credito'],
+    [/\b(?:por|con|en)?\s*(transferencia|transf|mercadopago|mp)\b/i, 'transferencia'],
   ];
 
   for (const [regex, method] of patterns) {
@@ -231,6 +234,172 @@ export function tryParseIncome(text: string): ParsedTelegramCommand | null {
   };
 }
 
+function cleanPersonName(name: string): string {
+  let res = clean(name);
+  res = res.replace(/^(?:a|al|de|para|con|la|el|por|en)\s+/i, '');
+  res = res.replace(/\s+(?:a|al|de|para|con|por|en)$/i, '');
+  res = res.replace(/\bdeuda\b/gi, '').trim();
+  res = res.replace(/^(?:a|al|de)\s+/i, '').trim();
+  res = res.replace(/\s+(?:a|al|de|para|con|por|en)$/i, '');
+  return clean(res);
+}
+
+/**
+ * Detects and parses debt payments or debt collections (both paying someone or collecting money owed)
+ * Examples:
+ * - "Le pagué 5000 a Juan por transferencia" -> actionType: 'pay', amount: 5000, person: 'Juan', method: 'transferencia'
+ * - "Juan me devolvió 5000 por transferencia" -> actionType: 'collect', amount: 5000, person: 'Juan', method: 'transferencia'
+ * - "Juan me pagó 5000 efectivo" -> actionType: 'collect', amount: 5000, person: 'Juan', method: 'efectivo'
+ * - "Me devolvió 5000 Juan por transferencia" -> actionType: 'collect', amount: 5000, person: 'Juan', method: 'transferencia'
+ * - "Cobré 5000 de Juan por transferencia" -> actionType: 'collect', amount: 5000, person: 'Juan', method: 'transferencia'
+ * - "Pago 10000 deuda juan" -> actionType: 'pay', amount: 10000, person: 'juan'
+ */
+export function tryParseDebtPayment(text: string): ParsedTelegramCommand | null {
+  const trimmed = clean(text);
+
+  // Exclude non-debt commands or standard income words
+  if (/^(?:\/)?(?:ingreso|sueldo)\b/i.test(trimmed)) return null;
+  if (/^(?:le\s+)?debo\b/i.test(trimmed)) return null;
+  if (/^me\s+deb(?:e|en)\b/i.test(trimmed)) return null;
+
+  const isUsd = /(?:usd|u\$s|dolares|dólares)/i.test(trimmed);
+  const currency: Currency = isUsd ? 'USD' : 'ARS';
+
+  // 1. Pattern: "[Persona] me devolvió/pagó/transfirió [monto] [resto/método]"
+  const personMePattern = /^([a-záéíóúñA-ZÁÉÍÓÚÑ\s]+?)\s+me\s+(?:devolvi[oó]|pag[oó]|transfiri[oó])\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?(?:\s+(.*))?$/i;
+  const match1 = trimmed.match(personMePattern);
+  if (match1) {
+    const rawPerson = match1[1];
+    const amount = parseAmountNumber(match1[2]);
+    const rawRest = match1[3] || '';
+    const { method, hasExplicitMethod } = extractPaymentMethod(rawRest);
+    const personName = cleanPersonName(rawPerson);
+    if (personName && amount > 0) {
+      return {
+        type: 'PAYMENT',
+        actionType: 'collect',
+        amount,
+        currency,
+        personName,
+        paymentMethod: method,
+        hasExplicitMethod,
+      };
+    }
+  }
+
+  // 2. Pattern: "Me devolvió/pagó/transfirió [monto] [Persona] [resto/método]"
+  const mePatternAmountFirst = /^me\s+(?:devolvi[oó]|pag[oó]|transfiri[oó])\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s+(.+)$/i;
+  const match2 = trimmed.match(mePatternAmountFirst);
+  if (match2) {
+    const amount = parseAmountNumber(match2[1]);
+    const rawRest = match2[2];
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(rawRest);
+    const personName = cleanPersonName(cleaned);
+    if (personName && amount > 0) {
+      return {
+        type: 'PAYMENT',
+        actionType: 'collect',
+        amount,
+        currency,
+        personName,
+        paymentMethod: method,
+        hasExplicitMethod,
+      };
+    }
+  }
+
+  // 3. Pattern: "Me devolvió/pagó/transfirió [Persona] [monto] [resto/método]"
+  const mePatternPersonFirst = /^me\s+(?:devolvi[oó]|pag[oó]|transfiri[oó])\s+([a-záéíóúñA-ZÁÉÍÓÚÑ\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?(?:\s+(.*))?$/i;
+  const match3 = trimmed.match(mePatternPersonFirst);
+  if (match3) {
+    const rawPerson = match3[1];
+    const amount = parseAmountNumber(match3[2]);
+    const rawRest = match3[3] || '';
+    const { method, hasExplicitMethod } = extractPaymentMethod(rawRest);
+    const personName = cleanPersonName(rawPerson);
+    if (personName && amount > 0) {
+      return {
+        type: 'PAYMENT',
+        actionType: 'collect',
+        amount,
+        currency,
+        personName,
+        paymentMethod: method,
+        hasExplicitMethod,
+      };
+    }
+  }
+
+  // 4. Pattern: "Cobré/cobre/cobro [deuda] [monto] [de/a] [Persona] [resto/método]"
+  const cobrePattern = /^(?:cobr[eé]|cobro)\s+(?:deuda\s+)?(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:deuda\s+)?(?:de\s+|a\s+)?(.+)$/i;
+  const match4 = trimmed.match(cobrePattern);
+  if (match4) {
+    const amount = parseAmountNumber(match4[1]);
+    const rawRest = match4[2];
+    const isSalaryIncome = /\b(sueldo|salario|nomina|nómina|quincena|aguinaldo|honorarios?|ventas?|freelance|factura|alquiler|jubilacion)\b/i.test(rawRest);
+    if (!isSalaryIncome) {
+      const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(rawRest);
+      const personName = cleanPersonName(cleaned);
+      if (personName && amount > 0) {
+        return {
+          type: 'PAYMENT',
+          actionType: 'collect',
+          amount,
+          currency,
+          personName,
+          paymentMethod: method,
+          hasExplicitMethod,
+        };
+      }
+    }
+  }
+
+  // 5. Pattern: "(Le) pagué/pague/pago/aboné/abone/abono/devolví/devolvi a [Persona] [monto] [resto/método]"
+  const payPersonFirstPattern = /^(?:le\s+)?(?:pago|pagu[eé]|abono|abon[eé]|devolv[ií])\s+(?:a\s+|al\s+)([a-záéíóúñA-ZÁÉÍÓÚÑ\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?(?:\s+(.*))?$/i;
+  const match5 = trimmed.match(payPersonFirstPattern);
+  if (match5) {
+    const rawPerson = match5[1];
+    const amount = parseAmountNumber(match5[2]);
+    const rawRest = match5[3] || '';
+    const { method, hasExplicitMethod } = extractPaymentMethod(rawRest);
+    const personName = cleanPersonName(rawPerson);
+    if (personName && amount > 0) {
+      return {
+        type: 'PAYMENT',
+        actionType: 'pay',
+        amount,
+        currency,
+        personName,
+        paymentMethod: method,
+        hasExplicitMethod,
+      };
+    }
+  }
+
+  // 6. Pattern: "(Le) pagué/pague/pago/aboné/abone/abono/devolví/devolvi [monto] (a/al/deuda) [Persona] [resto/método]"
+  const payAmountFirstPattern = /^(?:le\s+)?(?:pago|pagu[eé]|abono|abon[eé]|devolv[ií])\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:deuda\s+)?(?:a\s+|al\s+|de\s+)?(.+)$/i;
+  const match6 = trimmed.match(payAmountFirstPattern);
+  if (match6) {
+    const amount = parseAmountNumber(match6[1]);
+    const rawRest = match6[2];
+    const { method, cleaned, hasExplicitMethod } = extractPaymentMethod(rawRest);
+    const personName = cleanPersonName(cleaned);
+    if (personName && amount > 0) {
+      return {
+        type: 'PAYMENT',
+        actionType: 'pay',
+        amount,
+        currency,
+        personName,
+        paymentMethod: method,
+        hasExplicitMethod,
+      };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Parses user message into a structured financial command
  */
@@ -284,20 +453,11 @@ export function parseTelegramMessage(text: string): ParsedTelegramCommand {
     };
   }
 
-  // 4. Payment to debt: "pago 10000 deuda juan", "pago 10000 juan", "pague 15000 carlos"
-  const paymentRegex = /^(?:pago|pagu[eé]|abono)\s+(\d+(?:[.,]\d+)?)\s*(?:usd|u\$s|ars|\$)?\s*(?:deuda\s+)?(?:a\s+|de\s+)?(.+)$/i;
-  const paymentMatch = trimmed.match(paymentRegex);
-  if (paymentMatch) {
-    const rawAmount = paymentMatch[1].replace(',', '.');
-    const amount = parseFloat(rawAmount);
-    const person = clean(paymentMatch[2]);
-    const currency: Currency = /(?:usd|u\$s|dolares)/i.test(trimmed) ? 'USD' : 'ARS';
-    return {
-      type: 'PAYMENT',
-      amount,
-      currency,
-      personName: person,
-    };
+  // 6.2 Payment to debt or collect debt:
+  // "Le pagué 5000 a Juan por transferencia", "Juan me devolvió 5000 por transferencia", "Cobré 5000 de Juan", "pago 10000 juan"
+  const debtPaymentCommand = tryParseDebtPayment(trimmed);
+  if (debtPaymentCommand) {
+    return debtPaymentCommand;
   }
 
   // 5. Debt: "debo 50000 mecanico", "le debo 50000 al mecanico"

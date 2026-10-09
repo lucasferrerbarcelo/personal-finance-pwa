@@ -1173,7 +1173,8 @@ export async function POST(req: NextRequest) {
           `📋 *Deudas y Préstamos:*\n` +
           `• \`debo 50000 mecanico\` 👉 Registra deuda que vos debés\n` +
           `• \`me debe 20000 juan\` 👉 Registra dinero que te deben\n` +
-          `• \`pago 10000 deuda juan\` 👉 Registra pago y te dice cuánto resta\n` +
+          `• \`Le pagué 5000 a Juan por transferencia\` 👉 Salda tu deuda y descuenta de caja\n` +
+          `• \`Juan me devolvió 5000 por transferencia\` 👉 Salda lo que te deben e ingresa a caja\n` +
           `• \`/borrardeuda [persona]\` 👉 Borra una deuda (a favor o en contra)\n` +
           `• \`/deudas\` 👉 Muestra el estado de todas tus deudas activas`;
         await sendTelegramMessage(chatId, helpMessage);
@@ -1584,7 +1585,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'PAYMENT': {
-        const { personName, amount, currency } = command;
+        const { personName, amount, currency, actionType, paymentMethod } = command;
         if (!supabase) {
           await sendTelegramMessage(
             chatId,
@@ -1593,7 +1594,7 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // Search active debt by person name (case insensitive match)
+        // Search active debts matching person_name
         const { data: debts, error: debtsError } = await supabase
           .from('debts')
           .select('*, debt_payments(amount)')
@@ -1603,19 +1604,28 @@ export async function POST(req: NextRequest) {
         if (debtsError || !debts || debts.length === 0) {
           await sendTelegramMessage(
             chatId,
-            `❓ No encontré deudas activas para "*${personName}*". Revisá el nombre o si ya fue saldada.`
+            `❓ No encontré deudas activas para "*${personName}*". Revisá el nombre o si ya fue saldada con /deudas.`
           );
           break;
         }
 
-        const targetDebt = debts[0] as any;
+        // Pick best matching debt based on actionType (pay = owe, collect = owed)
+        let targetDebt = debts[0] as any;
+        if (actionType === 'pay') {
+          const match = debts.find((d: any) => d.type === 'owe');
+          if (match) targetDebt = match;
+        } else if (actionType === 'collect') {
+          const match = debts.find((d: any) => d.type === 'owed');
+          if (match) targetDebt = match;
+        }
+
         const paidSoFar = (targetDebt.debt_payments as any[])?.reduce(
           (acc, p) => acc + (Number(p.amount) || 0),
           0
         ) || 0;
         const currentRemaining = Number(targetDebt.total_amount) - paidSoFar;
 
-        // Record payment
+        // Record payment in debt_payments
         const { error: payError } = await supabase.from('debt_payments').insert({
           debt_id: targetDebt.id,
           amount,
@@ -1624,7 +1634,8 @@ export async function POST(req: NextRequest) {
         } as any);
 
         if (payError) {
-          await sendTelegramMessage(chatId, `⚠️ Error al registrar pago: ${payError.message}`);
+          console.error('[Telegram Webhook] Error registering debt payment:', payError);
+          await sendTelegramMessage(chatId, `⚠️ Error al registrar pago de deuda: ${payError.message}`);
           break;
         }
 
@@ -1635,17 +1646,81 @@ export async function POST(req: NextRequest) {
           await supabase.from('debts').update({ status: 'settled' } as any).eq('id', targetDebt.id);
         }
 
-        const reply = isSettled
-          ? `🎉 *¡Deuda Totalmente Saldada!*\n\n` +
-            `👤 *Persona:* ${targetDebt.person_name}\n` +
-            `💸 *Pago recibido/hecho:* ${formatCurrency(amount, targetDebt.currency)}\n` +
-            `🏁 *Saldo restante:* $ 0 (Marcada como Saldada)`
-          : `✅ *Pago Parcial Registrado*\n\n` +
-            `👤 *Persona:* ${targetDebt.person_name}\n` +
-            `💸 *Monto pagado:* ${formatCurrency(amount, targetDebt.currency)}\n` +
-            `⏳ *Saldo restante:* ${formatCurrency(newRemaining, targetDebt.currency)}`;
+        // AUTOMATIC IMPACT ON TRANSACTIONS (Caja / Balances)
+        const isPay = targetDebt.type === 'owe'; // I owe them -> payment is an expense
+        const txType = isPay ? 'expense' : 'income';
+        const method: PaymentMethod = paymentMethod || 'transferencia';
+        const methodLabel = PAYMENT_METHOD_LABELS[method] || (method === 'transferencia' ? 'Transferencia' : method);
 
-        await sendTelegramMessage(chatId, reply);
+        let categoryId: string | null = null;
+        if (isPay) {
+          const { data: cat } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('type', 'expense')
+            .ilike('name', '%deuda%')
+            .limit(1)
+            .maybeSingle();
+          categoryId = cat?.id || null;
+        } else {
+          const { data: cat } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('type', 'income')
+            .ilike('name', '%cobro%deuda%')
+            .limit(1)
+            .maybeSingle();
+          categoryId = cat?.id || null;
+        }
+
+        const txConcept = isPay
+          ? `Pago deuda a ${targetDebt.person_name}`
+          : `Cobro de deuda de ${targetDebt.person_name}`;
+
+        const txId = crypto.randomUUID();
+        const { error: txError } = await supabase.from('transactions').insert({
+          id: txId,
+          type: txType,
+          amount,
+          currency: targetDebt.currency || currency || 'ARS',
+          category_id: categoryId,
+          date: today,
+          note: txConcept,
+          payment_method: method,
+          total_installments: 1,
+          current_installment: 1,
+          installment_total: 1,
+          installment_current: 1,
+        } as any);
+
+        if (txError) {
+          console.error('[Telegram Webhook] Error inserting transaction for debt payment:', txError);
+        }
+
+        const headerTitle = isPay ? '✅ *Pago de deuda registrado*' : '✅ *Cobro de deuda registrado*';
+        const debtLine = `📉 *Deuda con ${targetDebt.person_name} actualizada*`;
+        const remainingInfo = isSettled
+          ? `• Saldo restante: *$ 0* 🎉 _(Totalmente saldada)_`
+          : `• Saldo restante: *${formatCurrency(newRemaining, targetDebt.currency)}*`;
+        const cashImpact = isPay
+          ? `💸 *Egreso registrado en caja:* -${formatCurrency(amount, targetDebt.currency)} (${methodLabel})`
+          : `🟢 *Ingreso registrado en caja:* +${formatCurrency(amount, targetDebt.currency)} (${methodLabel})`;
+
+        const reply = `${headerTitle}\n\n` +
+          `${debtLine}\n` +
+          `• Monto: *${formatCurrency(amount, targetDebt.currency)}*\n` +
+          `${remainingInfo}\n\n` +
+          `${cashImpact}`;
+
+        await sendTelegramMessage(chatId, reply, {
+          replyMarkup: {
+            inline_keyboard: [
+              [
+                { text: '↩️ Deshacer movimiento', callback_data: `undo_${txId}` },
+              ],
+            ],
+          },
+        });
         break;
       }
 

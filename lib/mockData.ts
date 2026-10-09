@@ -16,6 +16,8 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat-13', name: 'Honorarios', type: 'income', icon: 'Briefcase', color: '#06b6d4' },
   { id: 'cat-14', name: 'Transferencia', type: 'income', icon: 'ArrowRightLeft', color: '#3b82f6' },
   { id: 'cat-15', name: 'Otros Ingresos', type: 'income', icon: 'TrendingUp', color: '#14b8a6' },
+  { id: 'cat-16', name: 'Deudas', type: 'expense', icon: 'HandCoins', color: '#f97316' },
+  { id: 'cat-17', name: 'Cobro Deudas', type: 'income', icon: 'HandCoins', color: '#10b981' },
 ];
 
 export const INITIAL_TRANSACTIONS: Transaction[] = [

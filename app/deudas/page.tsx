@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export default function DeudasPage() {
-  const { openCreditCardsModal } = useApp();
+  const { openCreditCardsModal, triggerRefresh } = useApp();
   const [debts, setDebts] = useState<DebtSummary[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +60,7 @@ export default function DeudasPage() {
       try {
         await deleteDebt(debt.id);
         await loadData();
+        triggerRefresh();
       } catch (err: any) {
         console.error('Error al eliminar deuda:', err);
         alert(`Error al eliminar la deuda: ${err?.message || 'Error desconocido'}`);
@@ -295,6 +296,7 @@ export default function DeudasPage() {
         onClose={() => setIsNewDebtModalOpen(false)}
         onSuccess={() => {
           loadData();
+          triggerRefresh();
         }}
         initialType={activeTab}
       />
@@ -305,6 +307,7 @@ export default function DeudasPage() {
         onClose={() => setSelectedDebtForPayment(null)}
         onSuccess={() => {
           loadData();
+          triggerRefresh();
         }}
         debt={selectedDebtForPayment}
       />

@@ -339,13 +339,16 @@ export interface AddPaymentParams {
   amount: number;
   date?: string;
   note?: string | null;
+  payment_method?: PaymentMethod;
 }
 
 export async function addDebtPayment(params: AddPaymentParams): Promise<{
   payment: DebtPayment;
   debt: DebtSummary;
+  transaction?: Transaction;
 }> {
   const paymentDate = params.date || getCurrentDateISO();
+  const paymentMethod: PaymentMethod = params.payment_method || 'transferencia';
   const payment: DebtPayment = {
     id: `pay-${Date.now()}`,
     debt_id: params.debt_id,
@@ -355,8 +358,17 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
     created_at: new Date().toISOString(),
   };
 
+  let createdTx: Transaction | undefined;
+
   if (supabase) {
-    // 1. Insert payment
+    // 1. Fetch debt details to know type and person_name
+    const { data: debtInfo } = await supabase
+      .from('debts')
+      .select('*')
+      .eq('id', params.debt_id)
+      .single();
+
+    // 2. Insert payment into debt_payments
     await supabase.from('debt_payments').insert({
       debt_id: params.debt_id,
       amount: params.amount,
@@ -364,7 +376,7 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
       note: params.note || null,
     });
 
-    // 2. Fetch updated debt summary from view
+    // 3. Fetch updated debt summary from view
     const { data: updatedDebt } = await supabase
       .from('v_debts_summary')
       .select('*')
@@ -380,7 +392,67 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
           .eq('id', params.debt_id);
         updatedDebt.status = 'settled';
       }
+    }
 
+    // 4. AUTOMATIC IMPACT: Insert transaction in `transactions`
+    const debtRef = updatedDebt || debtInfo;
+    if (debtRef) {
+      const isOwe = debtRef.type === 'owe'; // I owe them -> expense
+      const txType: TransactionType = isOwe ? 'expense' : 'income';
+      const concept = isOwe
+        ? (params.note ? `Pago deuda a ${debtRef.person_name} (${params.note})` : `Pago deuda a ${debtRef.person_name}`)
+        : (params.note ? `Cobro de deuda de ${debtRef.person_name} (${params.note})` : `Cobro de deuda de ${debtRef.person_name}`);
+
+      // Category lookup
+      let categoryId: string | null = null;
+      if (isOwe) {
+        const { data: cat } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('type', 'expense')
+          .ilike('name', '%deuda%')
+          .limit(1)
+          .maybeSingle();
+        categoryId = cat?.id || null;
+      } else {
+        const { data: cat } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('type', 'income')
+          .ilike('name', '%cobro%deuda%')
+          .limit(1)
+          .maybeSingle();
+        categoryId = cat?.id || null;
+      }
+
+      const txId = crypto.randomUUID();
+      const txPayload = {
+        id: txId,
+        type: txType,
+        amount: params.amount,
+        currency: debtRef.currency || 'ARS',
+        category_id: categoryId,
+        date: paymentDate,
+        note: concept,
+        payment_method: paymentMethod,
+        total_installments: 1,
+        current_installment: 1,
+        installment_total: 1,
+        installment_current: 1,
+      };
+
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .insert(txPayload)
+        .select('*, category:categories(*)')
+        .single();
+
+      if (!txError && txData) {
+        createdTx = txData as Transaction;
+      }
+    }
+
+    if (updatedDebt) {
       const { data: payments } = await supabase
         .from('debt_payments')
         .select('*')
@@ -393,6 +465,7 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
           ...updatedDebt,
           payments: payments || [],
         },
+        transaction: createdTx,
       };
     }
   }
@@ -426,7 +499,30 @@ export async function addDebtPayment(params: AddPaymentParams): Promise<{
     throw new Error('Debt not found');
   }
 
-  return { payment, debt: resultDebt };
+  const isOwe = (resultDebt as DebtSummary).type === 'owe';
+  const localTx: Transaction = {
+    id: `tx-debt-${Date.now()}`,
+    type: isOwe ? 'expense' : 'income',
+    amount: params.amount,
+    currency: (resultDebt as DebtSummary).currency || 'ARS',
+    category_id: isOwe ? 'cat-16' : 'cat-17',
+    date: paymentDate,
+    note: isOwe
+      ? `Pago deuda a ${(resultDebt as DebtSummary).person_name}`
+      : `Cobro de deuda de ${(resultDebt as DebtSummary).person_name}`,
+    payment_method: paymentMethod,
+    total_installments: 1,
+    current_installment: 1,
+    installment_total: null,
+    installment_current: null,
+    parent_transaction_id: null,
+    created_at: new Date().toISOString(),
+  };
+
+  const currentTxs = getLocalItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, INITIAL_TRANSACTIONS);
+  setLocalItem(STORAGE_KEYS.TRANSACTIONS, [localTx, ...currentTxs]);
+
+  return { payment, debt: resultDebt, transaction: localTx };
 }
 
 export async function deleteDebt(id: string): Promise<boolean> {

@@ -89,6 +89,12 @@ const CATEGORY_RULES: CategoryMatchRule[] = [
       'udemy', 'platzi', 'coderhouse', 'idioma', 'ingles', 'profesor'
     ],
   },
+  {
+    categoryNames: ['Deudas', 'Préstamos', 'Prestamos'],
+    keywords: [
+      'deuda', 'deudas', 'prestamo', 'prestamos', 'pago deuda', 'abono deuda', 'debo', 'debia'
+    ],
+  },
 ];
 
 /**
@@ -187,8 +193,14 @@ export function findBestIncomeCategory(
   );
   if (partialMatch) return partialMatch;
 
-  // 3. Match using concept words
+  // 3. Match concept with debt collection keywords
   const conceptNorm = normalize(concept);
+  if (/\b(deuda|devolvi|devolvio|cobro|prestamo)\b/i.test(conceptNorm)) {
+    const debtCat = categories.find(c => normalize(c.name).includes('deuda'));
+    if (debtCat) return debtCat;
+  }
+
+  // 4. Match using concept words
   for (const cat of categories) {
     const catNorm = normalize(cat.name);
     if (conceptNorm.includes(catNorm) || catNorm.includes(conceptNorm)) {
@@ -196,7 +208,7 @@ export function findBestIncomeCategory(
     }
   }
 
-  // 4. Fallback to "Otros Ingresos" or first available category
+  // 5. Fallback to "Otros Ingresos" or first available category
   const otros = categories.find(c => normalize(c.name).includes('otro'));
   return otros || categories[0] || null;
 }

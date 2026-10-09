@@ -145,7 +145,7 @@ export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardPro
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px]"
             >
               <Plus className="w-3.5 h-3.5 stroke-[3px]" />
-              <span>Registrar Pago</span>
+              <span>{debt.type === 'owed' ? 'Registrar Cobro' : 'Registrar Pago'}</span>
             </button>
           )}
         </div>
