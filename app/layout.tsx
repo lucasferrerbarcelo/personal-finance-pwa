@@ -4,13 +4,24 @@ import { AppShell } from '@/components/Layout/AppShell';
 import { ThemeProvider } from '@/lib/theme/ThemeContext';
 
 export const metadata: Metadata = {
-  title: 'Personal Finance & Expense Tracker | PWA',
+  title: 'Finanzas | Personal Tracker',
   description: 'Gestor móvil de gastos personales, cuotas y deudas en ARS y USD con Telegram Bot y Supabase',
   manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: '/icon.svg',
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Finance Tracker',
+    title: 'Finanzas',
   },
 };
 

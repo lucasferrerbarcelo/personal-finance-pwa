@@ -2,24 +2,44 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Personal Finance & Expense Tracker',
-    short_name: 'FinanceApp',
+    name: 'Finanzas | Personal Tracker',
+    short_name: 'Finanzas',
     description: 'Control de gastos personales, cuotas y deudas en ARS y USD con Telegram Bot y Supabase',
     start_url: '/',
     display: 'standalone',
-    background_color: '#09090b',
-    theme_color: '#09090b',
+    background_color: '#F4F1EA',
+    theme_color: '#F4F1EA',
     orientation: 'portrait-primary',
     icons: [
       {
-        src: '/icons/icon.svg',
+        src: '/icon.svg',
         sizes: 'any',
         type: 'image/svg+xml',
+        purpose: 'any',
       },
       {
-        src: '/icon',
-        sizes: '32x32',
+        src: '/icon-192.png',
+        sizes: '192x192',
         type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
       },
     ],
   };
