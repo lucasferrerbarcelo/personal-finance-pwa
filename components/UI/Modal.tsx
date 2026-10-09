@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useTheme } from '@/lib/theme/ThemeContext';
 
 interface ModalProps {
   isOpen: boolean;
@@ -20,6 +21,8 @@ export function Modal({
   children,
   maxWidth = 'max-w-md',
 }: ModalProps) {
+  const { isMinimal } = useTheme();
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -46,18 +49,44 @@ export function Modal({
 
       {/* Modal Dialog / Mobile Bottom Sheet */}
       <div
-        className={`relative z-10 w-full ${maxWidth} rounded-t-2xl sm:rounded-2xl bg-[#F4F1EA] border-2 border-black p-6 shadow-[6px_6px_0px_0px_#000] text-black transition-all animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto`}
+        className={`relative z-10 w-full ${maxWidth} rounded-t-2xl sm:rounded-2xl p-6 transition-all animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto ${
+          isMinimal
+            ? 'bg-white border border-zinc-200 shadow-xl text-zinc-900'
+            : 'bg-[#F4F1EA] border-2 border-black shadow-[6px_6px_0px_0px_#000] text-black'
+        }`}
       >
-        <div className="flex items-center justify-between pb-3.5 border-b-2 border-black">
+        <div
+          className={`flex items-center justify-between pb-3.5 ${
+            isMinimal ? 'border-b border-zinc-100' : 'border-b-2 border-black'
+          }`}
+        >
           <div>
-            <h2 className="text-lg font-black text-black tracking-tight">{title}</h2>
-            {subtitle && <p className="text-xs font-mono font-semibold text-zinc-600 mt-0.5">{subtitle}</p>}
+            <h2
+              className={`text-lg tracking-tight ${
+                isMinimal ? 'font-bold text-zinc-900' : 'font-black text-black'
+              }`}
+            >
+              {title}
+            </h2>
+            {subtitle && (
+              <p
+                className={`text-xs mt-0.5 ${
+                  isMinimal ? 'text-zinc-500 font-sans' : 'font-mono font-semibold text-zinc-600'
+                }`}
+              >
+                {subtitle}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 bg-white border-2 border-black text-black hover:bg-[#FB923C] shadow-[1.5px_1.5px_0px_0px_#000] transition-colors active:translate-x-[1px] active:translate-y-[1px]"
+            className={`p-1.5 transition-colors ${
+              isMinimal
+                ? 'rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200'
+                : 'rounded-lg bg-white border-2 border-black text-black hover:bg-[#FB923C] shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+            }`}
           >
-            <X className="w-4 h-4 stroke-[2.5px]" />
+            <X className="w-4 h-4 stroke-[2px]" />
           </button>
         </div>
 

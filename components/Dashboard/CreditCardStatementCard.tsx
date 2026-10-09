@@ -6,6 +6,7 @@ import { getDefaultCreditCard, markStatementAsPaid } from '@/lib/creditCards/ser
 import { calculateStatementCycle, formatStatementMonthName, StatementCycleInfo } from '@/lib/creditCards/calculator';
 import { getCurrentDateISO, formatCurrency } from '@/lib/utils';
 import { CreditCard as CardIcon, CheckCircle2, Clock, AlertTriangle, Settings, Check } from 'lucide-react';
+import { useTheme } from '@/lib/theme/ThemeContext';
 
 interface CreditCardStatementCardProps {
   transactions: Transaction[];
@@ -18,6 +19,7 @@ export function CreditCardStatementCard({
   onRefresh,
   onOpenSettings,
 }: CreditCardStatementCardProps) {
+  const { isMinimal } = useTheme();
   const [card, setCard] = useState<CreditCard | null>(null);
   const [paying, setPaying] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -139,16 +141,34 @@ export function CreditCardStatementCard({
   };
 
   return (
-    <div className="bg-[#FB923C] border-2 border-black rounded-2xl shadow-[4px_4px_0px_0px_#000] p-5 sm:p-6 text-black flex flex-col justify-between">
+    <div
+      className={`rounded-2xl p-5 sm:p-6 flex flex-col justify-between transition-all ${
+        isMinimal
+          ? 'bg-white border border-zinc-200 shadow-sm text-zinc-900'
+          : 'bg-[#FB923C] border-2 border-black shadow-[4px_4px_0px_0px_#000] text-black'
+      }`}
+    >
       <div>
         {/* Header / Badges */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="inline-block px-2.5 py-0.5 bg-black text-[#FB923C] font-mono text-[11px] font-black tracking-wider uppercase rounded-md border border-black shadow-[1px_1px_0px_0px_#000]">
-              [LIQUIDACIÓN DE CRÉDITO]
-            </span>
+            {isMinimal ? (
+              <span className="inline-block px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200/80 font-sans text-xs font-semibold tracking-wider uppercase rounded-md">
+                Liquidación de Crédito
+              </span>
+            ) : (
+              <span className="inline-block px-2.5 py-0.5 bg-black text-[#FB923C] font-mono text-[11px] font-black tracking-wider uppercase rounded-md border border-black shadow-[1px_1px_0px_0px_#000]">
+                [LIQUIDACIÓN DE CRÉDITO]
+              </span>
+            )}
             {card && (
-              <span className="text-xs font-mono font-bold text-black/80 bg-white/70 px-2 py-0.5 rounded-md border border-black">
+              <span
+                className={`text-xs px-2 py-0.5 rounded-md border ${
+                  isMinimal
+                    ? 'font-sans font-medium text-zinc-600 bg-zinc-100 border-zinc-200'
+                    : 'font-mono font-bold text-black/80 bg-white/70 border-black'
+                }`}
+              >
                 {card.name}
               </span>
             )}
@@ -159,7 +179,11 @@ export function CreditCardStatementCard({
               <select
                 value={selectedMonth}
                 onChange={e => setSelectedMonth(e.target.value)}
-                className="bg-white border-2 border-black rounded-lg px-2 py-0.5 text-xs font-mono font-bold text-black shadow-[1px_1px_0px_0px_#000] focus:outline-none"
+                className={`rounded-lg px-2 py-0.5 text-xs focus:outline-none ${
+                  isMinimal
+                    ? 'bg-zinc-50 border border-zinc-200 font-medium text-zinc-800'
+                    : 'bg-white border-2 border-black font-mono font-bold text-black shadow-[1px_1px_0px_0px_#000]'
+                }`}
               >
                 {unpaidMonths.map(m => (
                   <option key={m} value={m}>
@@ -172,10 +196,14 @@ export function CreditCardStatementCard({
             {onOpenSettings && (
               <button
                 onClick={onOpenSettings}
-                className="p-1 text-black bg-white hover:bg-zinc-100 rounded-lg border-2 border-black shadow-[1px_1px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] transition-all"
+                className={`p-1.5 rounded-lg transition-all ${
+                  isMinimal
+                    ? 'text-zinc-600 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200'
+                    : 'text-black bg-white hover:bg-zinc-100 border-2 border-black shadow-[1px_1px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+                }`}
                 title="Configurar Cierre y Vencimiento"
               >
-                <Settings className="w-3.5 h-3.5 stroke-[2.5px]" />
+                <Settings className="w-3.5 h-3.5 stroke-[2px]" />
               </button>
             )}
           </div>
@@ -183,24 +211,40 @@ export function CreditCardStatementCard({
 
         {/* Title & Amount */}
         <div className="mt-3.5">
-          <h3 className="text-xs sm:text-sm font-mono font-black uppercase tracking-tight text-black flex items-center gap-1.5">
+          <h3
+            className={`text-xs sm:text-sm uppercase tracking-tight flex items-center gap-1.5 ${
+              isMinimal ? 'font-semibold text-zinc-600' : 'font-mono font-black text-black'
+            }`}
+          >
             <span>💳 Resumen de Tarjeta por Vencer ({monthName})</span>
           </h3>
 
-          <div className="text-3xl sm:text-4xl font-black font-mono tabular-nums tracking-tight text-black mt-2 mb-3">
+          <div
+            className={`mt-2 mb-3 tabular-nums tracking-tight ${
+              isMinimal
+                ? 'text-3xl sm:text-4xl font-bold font-sans text-zinc-950'
+                : 'text-3xl sm:text-4xl font-black font-mono text-black'
+            }`}
+          >
             {formatCurrency(totalForSelectedMonth, 'ARS')}
           </div>
         </div>
 
         {/* Dates Info Pill */}
-        <div className="inline-flex flex-wrap items-center gap-2 bg-white border-2 border-black rounded-xl px-3 py-1.5 shadow-[2px_2px_0px_0px_#000] text-xs font-mono font-bold text-black mb-4">
+        <div
+          className={`inline-flex flex-wrap items-center gap-2 rounded-xl px-3 py-1.5 text-xs mb-4 ${
+            isMinimal
+              ? 'bg-zinc-50 border border-zinc-200 font-medium text-zinc-600'
+              : 'bg-white border-2 border-black shadow-[2px_2px_0px_0px_#000] font-mono font-bold text-black'
+          }`}
+        >
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-amber-600 stroke-[2.5px]" />
             <span>Cierre: día {selectedCycleInfo.closingDay} ({selectedCycleInfo.closingDisplay})</span>
           </span>
-          <span className="text-black/30">|</span>
+          <span className={isMinimal ? 'text-zinc-300' : 'text-black/30'}>|</span>
           <span className="flex items-center gap-1">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600 stroke-[2.5px]" />
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 stroke-[2.5px]" />
             <span>Vence: día {selectedCycleInfo.dueDay}</span>
           </span>
         </div>
@@ -208,15 +252,25 @@ export function CreditCardStatementCard({
 
       {/* Success Notification */}
       {successMsg && (
-        <div className="bg-[#86EFAC] border-2 border-black rounded-xl p-3 mb-3 shadow-[2px_2px_0px_0px_#000] text-xs font-mono font-bold text-black flex items-center gap-2">
+        <div
+          className={`rounded-xl p-3 mb-3 text-xs flex items-center gap-2 ${
+            isMinimal
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium'
+              : 'bg-[#86EFAC] border-2 border-black shadow-[2px_2px_0px_0px_#000] font-mono font-bold text-black'
+          }`}
+        >
           <CheckCircle2 className="w-4 h-4 shrink-0 stroke-[2.5px]" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Action Button */}
-      <div className="pt-2 border-t-2 border-black/20 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[11px] font-mono text-black/80">
+      <div
+        className={`pt-2 flex flex-wrap items-center justify-between gap-3 ${
+          isMinimal ? 'border-t border-zinc-100' : 'border-t-2 border-black/20'
+        }`}
+      >
+        <p className={`text-[11px] ${isMinimal ? 'text-zinc-500' : 'font-mono text-black/80'}`}>
           {totalForSelectedMonth > 0
             ? 'Los consumos no descuentan tu caja hasta que marques el resumen pagado.'
             : '✅ Estás al día con este período. Sin consumos pendientes.'}
@@ -226,7 +280,11 @@ export function CreditCardStatementCard({
           <button
             onClick={handlePay}
             disabled={paying}
-            className="w-full sm:w-auto bg-black hover:bg-zinc-800 text-[#FB923C] font-mono font-black text-xs sm:text-sm py-2.5 px-4 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className={`w-full sm:w-auto text-xs sm:text-sm py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+              isMinimal
+                ? 'bg-zinc-900 hover:bg-zinc-800 text-white font-semibold shadow-sm border border-transparent'
+                : 'bg-black hover:bg-zinc-800 text-[#FB923C] font-mono font-black border-2 border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px]'
+            }`}
           >
             <Check className="w-4 h-4 stroke-[3px]" />
             <span>{paying ? 'Procesando pago...' : 'Marcar resumen pagado'}</span>

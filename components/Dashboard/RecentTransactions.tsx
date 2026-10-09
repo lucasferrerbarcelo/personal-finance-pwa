@@ -8,6 +8,7 @@ import { CategoryIcon } from '../UI/CategoryIcon';
 import { PaymentMethodBadge } from '../UI/PaymentMethodBadge';
 import { ArrowRight, Pencil, Trash2, CreditCard, Wallet } from 'lucide-react';
 import { deleteTransaction } from '@/lib/supabase/client';
+import { useTheme } from '@/lib/theme/ThemeContext';
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -16,6 +17,7 @@ interface RecentTransactionsProps {
 }
 
 export function RecentTransactions({ transactions, onEdit, onRefresh }: RecentTransactionsProps) {
+  const { isMinimal } = useTheme();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Take the last 5 transactions
@@ -38,19 +40,45 @@ export function RecentTransactions({ transactions, onEdit, onRefresh }: RecentTr
   };
 
   return (
-    <div className="bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_0px_#000] p-5 text-black">
+    <div
+      className={`rounded-2xl p-5 transition-all ${
+        isMinimal
+          ? 'bg-white border border-zinc-200 shadow-sm text-zinc-900'
+          : 'bg-white border-2 border-black shadow-[3px_3px_0px_0px_#000] text-black'
+      }`}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b-2 border-black/10">
+      <div
+        className={`flex items-center justify-between pb-4 ${
+          isMinimal ? 'border-b border-zinc-100' : 'border-b-2 border-black/10'
+        }`}
+      >
         <div>
-          <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
-            [ÚLTIMOS MOVIMIENTOS]
-          </span>
-          <h3 className="text-base font-black tracking-tight text-black">Actividad Reciente</h3>
+          {isMinimal ? (
+            <span className="inline-block px-2 py-0.5 bg-zinc-100 text-zinc-600 font-sans text-xs font-semibold tracking-wider uppercase rounded-md border border-zinc-200/80 mb-1">
+              Últimos Movimientos
+            </span>
+          ) : (
+            <span className="inline-block px-2 py-0.5 bg-black text-white font-mono text-[10px] font-black tracking-wider uppercase rounded-md border border-black mb-1">
+              [ÚLTIMOS MOVIMIENTOS]
+            </span>
+          )}
+          <h3
+            className={`text-base tracking-tight ${
+              isMinimal ? 'font-bold text-zinc-900' : 'font-black text-black'
+            }`}
+          >
+            Actividad Reciente
+          </h3>
         </div>
 
         <Link
           href="/movimientos"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FACC15] hover:bg-[#eab308] text-black border-2 border-black rounded-xl text-xs font-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000]"
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition-all ${
+            isMinimal
+              ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-medium border border-zinc-200 shadow-none'
+              : 'bg-[#FACC15] hover:bg-[#eab308] text-black border-2 border-black font-black shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+          }`}
         >
           <span>Ver todos</span>
           <ArrowRight className="w-3.5 h-3.5 stroke-[2.5px]" />

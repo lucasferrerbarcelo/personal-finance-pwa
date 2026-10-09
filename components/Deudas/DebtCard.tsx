@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { DebtSummary } from '@/lib/supabase/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Plus, CheckCircle2, ChevronDown, ChevronUp, History, User, Trash2 } from 'lucide-react';
+import { useTheme } from '@/lib/theme/ThemeContext';
 
 interface DebtCardProps {
   debt: DebtSummary;
@@ -12,6 +13,7 @@ interface DebtCardProps {
 }
 
 export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardProps) {
+  const { isMinimal } = useTheme();
   const [showHistory, setShowHistory] = useState(false);
 
   const isOwedToMe = debt.type === 'owed';
@@ -131,10 +133,14 @@ export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardPro
           {/* Delete debt button */}
           <button
             onClick={() => onDeleteDebt(debt)}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-black text-rose-700 bg-rose-100 hover:bg-rose-200 border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]"
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-all ${
+              isMinimal
+                ? 'font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg shadow-none'
+                : 'font-mono font-black text-rose-700 bg-rose-100 hover:bg-rose-200 border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+            }`}
             title="Eliminar deuda"
           >
-            <Trash2 className="w-3.5 h-3.5 stroke-[2.5px]" />
+            <Trash2 className="w-3.5 h-3.5 stroke-[2px]" />
             <span>Borrar</span>
           </button>
 
@@ -142,9 +148,13 @@ export function DebtCard({ debt, onOpenPaymentModal, onDeleteDebt }: DebtCardPro
           {!isSettled && (
             <button
               onClick={() => onOpenPaymentModal(debt)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-[#86EFAC] hover:bg-[#4ade80] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px]"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition-all ${
+                isMinimal
+                  ? 'bg-zinc-900 hover:bg-zinc-800 text-white font-semibold rounded-lg shadow-sm border border-transparent'
+                  : 'bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black border-2 border-black shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3px]" />
+              <Plus className="w-3.5 h-3.5 stroke-[2.5px]" />
               <span>{debt.type === 'owed' ? 'Registrar Cobro' : 'Registrar Pago'}</span>
             </button>
           )}

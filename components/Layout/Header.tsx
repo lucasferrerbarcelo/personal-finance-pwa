@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Send, Info, CreditCard } from 'lucide-react';
+import { Plus, Send, Info, CreditCard, Palette } from 'lucide-react';
 import { Modal } from '../UI/Modal';
+import { useTheme } from '@/lib/theme/ThemeContext';
 
 interface HeaderProps {
   onOpenNewTxModal?: () => void;
@@ -10,8 +11,18 @@ interface HeaderProps {
 }
 
 export function BauhausLogo({ className = 'w-8 h-8' }: { className?: string }) {
+  const { isMinimal } = useTheme();
+
+  if (isMinimal) {
+    return (
+      <div className={`relative ${className} bg-zinc-900 border border-zinc-700 rounded-xl shadow-sm flex items-center justify-center shrink-0 transition-all`}>
+        <div className="w-3 h-3 rounded-sm bg-white rotate-45" />
+      </div>
+    );
+  }
+
   return (
-    <div className={`relative ${className} bg-[#FACC15] border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_#000] flex items-center justify-center shrink-0`}>
+    <div className={`relative ${className} bg-[#FACC15] border-2 border-black rounded-xl shadow-[2px_2px_0px_0px_#000] flex items-center justify-center shrink-0 transition-all`}>
       <div className="w-3.5 h-3.5 rounded-full bg-black" />
     </div>
   );
@@ -19,6 +30,7 @@ export function BauhausLogo({ className = 'w-8 h-8' }: { className?: string }) {
 
 export function Header({ onOpenNewTxModal, onOpenCreditCardsModal }: HeaderProps) {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
+  const { theme, toggleTheme, isMinimal } = useTheme();
 
   const todayStr = new Intl.DateTimeFormat('es-AR', {
     weekday: 'short',
@@ -30,26 +42,58 @@ export function Header({ onOpenNewTxModal, onOpenCreditCardsModal }: HeaderProps
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#F4F1EA] border-b-2 border-black px-4 md:px-8 py-3 flex items-center justify-between">
+      <header
+        className={`sticky top-0 z-30 px-4 md:px-8 py-3 flex items-center justify-between transition-colors duration-150 ${
+          isMinimal
+            ? 'bg-white/90 backdrop-blur-md border-b border-zinc-200 shadow-sm text-zinc-900'
+            : 'bg-[#F4F1EA] border-b-2 border-black text-black'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2.5">
             <BauhausLogo className="w-8 h-8" />
-            <span className="text-lg md:text-xl font-black tracking-tight text-black">
+            <span className={`text-lg md:text-xl tracking-tight ${isMinimal ? 'font-bold text-zinc-900' : 'font-black text-black'}`}>
               FINANZAS
             </span>
           </div>
 
-          <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-md bg-white border-2 border-black text-[11px] font-mono font-bold text-black shadow-[1px_1px_0px_0px_#000]">
+          <span
+            className={`hidden sm:inline-block px-2.5 py-0.5 rounded-md text-[11px] font-mono font-bold ${
+              isMinimal
+                ? 'bg-zinc-100 text-zinc-600 border border-zinc-200/80 shadow-none'
+                : 'bg-white border-2 border-black text-black shadow-[1px_1px_0px_0px_#000]'
+            }`}
+          >
             [{capitalizedDate.toUpperCase()}]
           </span>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Theme Switcher Button */}
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all ${
+              isMinimal
+                ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-200 shadow-none'
+                : 'bg-[#FEF08A] hover:bg-[#fde047] text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+            }`}
+            title={`Estilo actual: ${isMinimal ? 'Minimal / Swiss Clean' : 'Bauhaus / Brutalist'}. Click para cambiar.`}
+          >
+            <Palette className="w-3.5 h-3.5 stroke-[2.5px] text-amber-600" />
+            <span className="font-mono text-[11px]">
+              {isMinimal ? 'Minimal' : 'Bauhaus'}
+            </span>
+          </button>
+
           {/* Credit Cards button */}
           {onOpenCreditCardsModal && (
             <button
               onClick={onOpenCreditCardsModal}
-              className="flex items-center gap-1.5 text-xs text-black bg-[#FB923C] border-2 border-black px-2.5 py-1.5 rounded-xl shadow-[2px_2px_0px_0px_#000] font-bold transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-[0px_0px_0px_0px_#000]"
+              className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all ${
+                isMinimal
+                  ? 'text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200 shadow-sm'
+                  : 'text-black bg-[#FB923C] border-2 border-black shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+              }`}
               title="Configuración de Tarjetas de Crédito"
             >
               <CreditCard className="w-3.5 h-3.5 stroke-[2.5px]" />
@@ -60,18 +104,26 @@ export function Header({ onOpenNewTxModal, onOpenCreditCardsModal }: HeaderProps
           {/* Telegram info button */}
           <button
             onClick={() => setIsTelegramModalOpen(true)}
-            className="flex items-center gap-1.5 text-xs text-black bg-[#60A5FA] border-2 border-black px-2.5 py-1.5 rounded-xl shadow-[2px_2px_0px_0px_#000] font-bold transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-[0px_0px_0px_0px_#000]"
+            className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all ${
+              isMinimal
+                ? 'text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200 shadow-sm'
+                : 'text-black bg-[#60A5FA] border-2 border-black shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px]'
+            }`}
             title="Integración Telegram Bot"
           >
             <Send className="w-3.5 h-3.5 stroke-[2.5px]" />
-            <span className="hidden sm:inline">Bot Telegram</span>
+            <span className="hidden sm:inline">Bot</span>
           </button>
 
           {/* Quick add movement button */}
           {onOpenNewTxModal && (
             <button
               onClick={onOpenNewTxModal}
-              className="flex items-center gap-1.5 bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black text-xs py-1.5 px-3.5 rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000]"
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3.5 rounded-xl transition-all ${
+                isMinimal
+                  ? 'bg-zinc-900 hover:bg-zinc-800 text-white font-semibold shadow-sm border border-transparent'
+                  : 'bg-[#86EFAC] hover:bg-[#4ade80] text-black font-black border-2 border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px]'
+              }`}
             >
               <Plus className="w-4 h-4 stroke-[3px]" />
               <span>Nuevo</span>
@@ -133,9 +185,15 @@ export function Header({ onOpenNewTxModal, onOpenCreditCardsModal }: HeaderProps
                 </p>
               </div>
               <div className="bg-white/5 p-2 rounded-lg">
-                <span className="text-emerald-400">pago 10000 deuda juan</span>
+                <span className="text-emerald-400">Le pagué 5000 a Juan por transferencia</span>
                 <p className="text-zinc-400 font-sans text-[11px] mt-0.5">
-                  👉 Registra pago parcial; si llega a 0 marca la deuda como saldada
+                  👉 Salda tu deuda con Juan y descuenta egreso de caja
+                </p>
+              </div>
+              <div className="bg-white/5 p-2 rounded-lg">
+                <span className="text-emerald-400">Juan me devolvió 5000 por transferencia</span>
+                <p className="text-zinc-400 font-sans text-[11px] mt-0.5">
+                  👉 Salda lo que te deben e ingresa dinero a caja
                 </p>
               </div>
               <div className="bg-white/5 p-2 rounded-lg">

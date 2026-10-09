@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AppShell } from '@/components/Layout/AppShell';
+import { ThemeProvider } from '@/lib/theme/ThemeContext';
 
 export const metadata: Metadata = {
   title: 'Personal Finance & Expense Tracker | PWA',
@@ -27,9 +28,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
-      <body className="font-sans antialiased text-black bg-[#F4F1EA]">
-        <AppShell>{children}</AppShell>
+    <html lang="es" data-theme="bauhaus" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t = localStorage.getItem('app-theme') || 'bauhaus';
+                document.documentElement.setAttribute('data-theme', t);
+                document.documentElement.classList.add('theme-' + t);
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
+      <body className="font-sans antialiased text-foreground bg-background transition-colors duration-150">
+        <ThemeProvider>
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );
